@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 滿版月曆生成器 - 待辦輸入、假日底色與起始日切換版</title>
+    <title>A4 滿版月曆生成器 - 排版優化版</title>
     <style>
-        /* 定義可動態調整邊距的 CSS 變數 (統一一個變數) */
+        /* 定義可動態調整邊距的 CSS 變數 */
         :root {
             --page-padding: 5mm;
         }
@@ -26,12 +26,14 @@
             padding: 20px;
         }
 
-        /* 控制面板 (列印時會隱藏) */
+        /* =========================================
+           控制面板 UI 設計 (全新優化)
+           ========================================= */
         .controls {
             background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
             margin-bottom: 20px;
             width: 100%;
             max-width: 900px;
@@ -40,24 +42,43 @@
             gap: 15px;
         }
 
-        .control-row {
+        .control-section {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 15px;
             flex-wrap: wrap;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
+            gap: 15px;
         }
 
-        .controls select, .controls button, .controls input[type="number"] {
-            padding: 6px 10px;
+        .options-row {
+            justify-content: flex-start;
+            gap: 30px;
+        }
+
+        .divider {
+            border: 0;
+            border-top: 1px solid #eaeaea;
+            width: 100%;
+            margin: 0;
+        }
+
+        /* 統一表單元素風格 */
+        .controls select, .controls input[type="number"], .controls button {
+            padding: 8px 12px;
             font-size: 15px;
             border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .controls select:focus, .controls input[type="number"]:focus {
+            border-color: #4CAF50;
         }
 
         .controls input[type="number"] {
             width: 70px;
+            text-align: center;
         }
 
         .controls button {
@@ -65,50 +86,96 @@
             color: white;
             border: none;
             cursor: pointer;
-            transition: background-color 0.3s;
+            font-weight: bold;
+            transition: background-color 0.3s, transform 0.1s;
         }
 
-        .controls button:hover {
-            background-color: #45a049;
-        }
+        .controls button:hover { background-color: #45a049; }
+        .controls button:active { transform: scale(0.98); }
 
-        .btn-secondary {
-            background-color: #008CBA !important;
-        }
+        .btn-secondary { background-color: #008CBA !important; }
+        .btn-secondary:hover { background-color: #007bb5 !important; }
+        .btn-small { padding: 6px 10px !important; font-size: 14px !important; }
 
-        .btn-secondary:hover {
-            background-color: #007bb5 !important;
-        }
-
-        /* 邊距調整區塊 */
-        .margin-settings {
+        /* 勾選框文字標籤 */
+        .checkbox-label {
             display: flex;
-            gap: 15px;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: bold;
             font-size: 15px;
+            user-select: none;
+            color: #333;
         }
 
-        /* 月份勾選區塊 */
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #4CAF50;
+        }
+
+        /* 月份勾選區塊 (Grid 網格排版，自動對齊) */
         .month-selectors {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
             gap: 10px;
+            width: 100%;
         }
 
         .month-selectors label {
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            gap: 6px;
             cursor: pointer;
-            font-size: 16px;
-            padding: 5px;
-            background: #f4f4f4;
-            border-radius: 4px;
+            font-size: 15px;
+            padding: 10px 5px;
+            background: #f9f9f9;
+            border-radius: 8px;
             border: 1px solid #ddd;
+            transition: background 0.2s;
+            user-select: none;
+            color: #444;
         }
 
-        /* 月曆容器 (容納多個頁面) */
+        .month-selectors label:hover { background: #eee; }
+        .month-selectors input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #008CBA;
+        }
+
+        /* --- 手機版專屬格局優化 --- */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .controls { padding: 15px; gap: 12px; }
+            
+            /* 讓年份與列印按鈕上下排列，按鈕滿版好按 */
+            .header-row { flex-direction: column; align-items: stretch; gap: 12px; }
+            .print-btn-wrapper button { width: 100%; padding: 12px !important; font-size: 16px !important; }
+            
+            /* 選項改為上下整齊排列 */
+            .options-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            
+            /* 邊界設定保持水平左右對齊 */
+            .margin-row { justify-content: space-between; width: 100%; }
+            
+            /* 月份改為 4 欄網格，12個月剛好 3 列 */
+            .month-selectors { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+            .month-selectors label { font-size: 14px; padding: 8px 2px; }
+        }
+
+        @media (max-width: 400px) {
+            /* 若螢幕極小則改為 3 欄 */
+            .month-selectors { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        /* =========================================
+           月曆頁面設計 (A4 顯示與列印)
+           ========================================= */
         #calendarContainer {
             display: flex;
             flex-direction: column;
@@ -117,20 +184,17 @@
             align-items: center;
         }
 
-        /* A4 紙張設定 (螢幕預覽用，加入動態變數與 RWD 響應式) */
         .page {
             width: 100%;
             max-width: 210mm;
             aspect-ratio: 210 / 297;
             background-color: #eeeeee;
-            /* 使用單一 CSS 變數控制四邊距 */
             padding: var(--page-padding);
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
         }
 
-        /* 月曆標題 */
         .calendar-header {
             text-align: center;
             font-size: 28px;
@@ -139,7 +203,6 @@
             color: #333;
         }
 
-        /* 月曆網格外框 */
         .calendar-grid {
             flex-grow: 1;
             display: flex;
@@ -148,10 +211,7 @@
             border-left: 1px solid #888;
         }
 
-        /* 星期列表頭 */
-        .weekdays {
-            display: flex;
-        }
+        .weekdays { display: flex; }
 
         .weekday {
             flex: 1;
@@ -164,23 +224,16 @@
             border-bottom: 1px solid #888;
         }
         
-        .weekday.weekend {
-            color: #d9534f;
-        }
+        .weekday.weekend { color: #d9534f; }
 
-        /* 日期列區域 */
         .days {
             flex-grow: 1;
             display: flex;
             flex-direction: column;
         }
 
-        .week-row {
-            display: flex;
-            flex: 1;
-        }
+        .week-row { display: flex; flex: 1; }
 
-        /* 日期格子 (改為 flex column 以容納待辦事項) */
         .day-cell {
             flex: 1;
             border-right: 1px solid #888;
@@ -193,12 +246,11 @@
             transition: background-color 0.3s;
         }
 
-        /* 勾選顯示假日後，假日格子的淺紅色底色 */
+        /* 假日底色 */
         #calendarContainer.show-holidays-mode .day-cell.is-holiday {
             background-color: #fff0f0;
         }
 
-        /* 日期與假日標籤的頭部區域 */
         .day-header {
             display: flex;
             justify-content: space-between;
@@ -211,21 +263,17 @@
             color: #333;
         }
 
-        /* 假日文字與顏色 (包含 50% 透明度) */
         .holiday-text {
             font-size: 11px;
             color: #d9534f;
-            opacity: 0.5; /* 假期字透明度 50% */
+            opacity: 0.5;
             text-align: right;
             line-height: 1.2;
             word-break: break-all;
         }
 
-        .is-holiday .day-number {
-            color: #d9534f;
-        }
+        .is-holiday .day-number { color: #d9534f; }
 
-        /* 待辦事項輸入區 */
         .todo-input {
             flex-grow: 1;
             outline: none;
@@ -234,28 +282,15 @@
             line-height: 1.4;
             overflow: hidden;
             word-break: break-all;
-            /* 預設些微透明，點擊時清楚顯示可輸入 */
             cursor: text;
         }
 
-        .todo-input:focus {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
+        .todo-input:focus { background-color: rgba(255, 255, 255, 0.5); }
 
-        /* 非本月日期的文字顏色設定為淡色 */
-        .other-month .day-number {
-            color: #aaa;
-        }
-        .other-month .holiday-text {
-            color: #e59b99;
-        }
+        .other-month .day-number { color: #aaa; }
+        .other-month .holiday-text { color: #e59b99; }
 
-        /* --- 手機版螢幕樣式調整 --- */
         @media (max-width: 768px) {
-            body { padding: 10px; }
-            .controls { padding: 15px; }
-            .margin-settings { justify-content: space-between; }
-            .month-selectors label { flex: 1 1 22%; justify-content: center; font-size: 14px; }
             .calendar-header { font-size: 18px; margin-bottom: 5px; }
             .weekday { font-size: 10px; padding: 4px 0; }
             .day-number { font-size: 12px; }
@@ -264,28 +299,17 @@
             .day-cell { padding: 4px; }
         }
 
-        /* --- 列印專用的 CSS 樣式 --- */
+        /* --- 列印專用 CSS --- */
         @media print {
-            body {
-                background-color: transparent;
-                padding: 0;
-            }
-            .controls {
-                display: none;
-            }
-            #calendarContainer {
-                gap: 0;
-            }
-            @page {
-                size: A4 portrait;
-                margin: 0; /* 強制消除預設頁首頁尾邊界 */
-            }
+            body { background-color: transparent; padding: 0; }
+            .controls { display: none; }
+            #calendarContainer { gap: 0; }
+            @page { size: A4 portrait; margin: 0; }
             .page {
                 box-shadow: none;
                 width: 210mm !important;
                 height: 297mm !important;
                 aspect-ratio: auto;
-                /* 列印時套用自訂邊距變數 */
                 padding: var(--page-padding) !important;
                 margin: 0;
                 page-break-after: always;
@@ -293,54 +317,59 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            .page:last-child {
-                page-break-after: auto;
-            }
-            
-            /* 強制保留假日淺紅底色 */
-            #calendarContainer.show-holidays-mode .day-cell.is-holiday {
-                background-color: #fff0f0 !important;
-            }
-
-            /* 強制還原列印時的字體，不受手機版影響 */
+            .page:last-child { page-break-after: auto; }
+            #calendarContainer.show-holidays-mode .day-cell.is-holiday { background-color: #fff0f0 !important; }
             .calendar-header { font-size: 28px !important; margin-bottom: 8px !important; }
             .weekday { font-size: 15px !important; padding: 8px 0 !important; }
             .day-number { font-size: 16px !important; }
-            .holiday-text { font-size: 11px !important; opacity: 0.5 !important; } /* 確保列印也是 50% 透明 */
+            .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
             .todo-input { font-size: 13px !important; }
             .day-cell { padding: 6px !important; }
-            .todo-input:empty::before { content: ""; } /* 隱藏未輸入的提示 (如果有的話) */
+            .todo-input:empty::before { content: ""; }
         }
     </style>
 </head>
 <body>
 
     <div class="controls no-print">
-        <div class="control-row">
+        <div class="control-section header-row">
             <div style="display: flex; gap: 10px; align-items: center;">
                 <select id="yearSelect"></select>
-                <span style="font-size:16px;">年</span>
+                <span style="font-size:16px; font-weight: bold; color: #333;">年</span>
             </div>
-            
-            <label style="display:flex; align-items:center; gap:5px; margin-left: 10px; cursor: pointer; font-weight: bold;">
+            <div class="print-btn-wrapper">
+                <button onclick="window.print()">🖨️ 列印勾選月份</button>
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="control-section options-row">
+            <label class="checkbox-label">
                 <input type="checkbox" id="showHolidays" checked>
                 顯示台灣假日
             </label>
-
-            <label style="display:flex; align-items:center; gap:5px; margin-left: 10px; cursor: pointer; font-weight: bold;">
+            <label class="checkbox-label">
                 <input type="checkbox" id="sundayFirst">
                 星期日為第一天
             </label>
-
-            <button id="selectAllBtn" class="btn-secondary" style="margin-left: auto;">全選 / 全不選</button>
-            <button onclick="window.print()">列印勾選月份</button>
         </div>
 
-        <div class="control-row margin-settings">
-            <span>邊界設定 (mm)：</span>
-            <label>四邊距 <input type="number" id="marginAll" value="5" min="0" max="50"></label>
+        <hr class="divider">
+
+        <div class="control-section margin-row">
+            <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
+            <label class="checkbox-label" style="font-weight: normal;">
+                四邊距 <input type="number" id="marginAll" value="5" min="0" max="50">
+            </label>
         </div>
 
+        <hr class="divider">
+
+        <div class="control-section">
+            <span style="font-weight: bold; color: #333;">選擇列印月份</span>
+            <button id="selectAllBtn" class="btn-secondary btn-small">全選 / 全不選</button>
+        </div>
         <div class="month-selectors" id="monthSelectors">
             </div>
     </div>
