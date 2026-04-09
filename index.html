@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 滿版月曆生成器 - 排版修復版</title>
+    <title>A4 滿版月曆生成器 - 純白底色版</title>
     <style>
         /* 定義可動態調整邊距的 CSS 變數，預設改為 1mm */
         :root {
@@ -233,7 +233,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            background-color: transparent;
+            background-color: #ffffff; /* 一般日期純白色 */
             transition: background-color 0.3s;
         }
 
@@ -333,7 +333,7 @@
             .day-number { font-size: 16px !important; }
             .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
             .todo-input { font-size: 13px !important; }
-            .day-cell { padding: 6px !important; }
+            .day-cell { padding: 6px !important; background-color: #ffffff !important; } /* 強制列印一般日期白底 */
             .todo-input:empty::before { content: ""; }
         }
     </style>
