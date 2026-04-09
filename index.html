@@ -360,7 +360,7 @@
         <div class="control-section margin-row">
             <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
             <label class="checkbox-label" style="font-weight: normal;">
-                四邊距 <input type="number" id="marginAll" value="1" min="0" max="50">
+                四邊距 <input type="number" id="marginAll" value="5" min="0" max="50">
             </label>
         </div>
 
@@ -583,4 +583,68 @@
                     const daySpan = document.createElement('span');
                     daySpan.className = 'day-number';
 
-                    c
+                    const holidaySpan = document.createElement('span');
+                    holidaySpan.className = 'holiday-text';
+
+                    let currentCellDate = "";
+                    let isCurrentMonth = false;
+
+                    if (row === 0 && col < firstDayOfWeek) {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = prevMonthCounter;
+                        currentCellDate = `${month === 1 ? year - 1 : year}-${month === 1 ? 12 : month - 1}-${prevMonthCounter}`;
+                        prevMonthCounter++;
+                    } else if (dateCounter <= daysInMonth) {
+                        daySpan.textContent = dateCounter;
+                        currentCellDate = `${year}-${month}-${dateCounter}`;
+                        isCurrentMonth = true;
+                        
+                        // 判斷實體日期的週末並加上 is-holiday class
+                        if (isSundayFirst) {
+                            if (col === 1 || col === 7) dayCell.classList.add('is-holiday');
+                        } else {
+                            if (col === 6 || col === 7) dayCell.classList.add('is-holiday');
+                        }
+                        
+                        dateCounter++;
+                    } else {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = nextMonthCounter;
+                        currentCellDate = `${month === 12 ? year + 1 : year}-${month === 12 ? 1 : month + 1}-${nextMonthCounter}`;
+                        nextMonthCounter++;
+                    }
+
+                    if (holidaysData[currentCellDate]) {
+                        holidaySpan.textContent = holidaysData[currentCellDate];
+                        if (isCurrentMonth) dayCell.classList.add('is-holiday');
+                    }
+
+                    dayHeader.appendChild(daySpan);
+                    dayHeader.appendChild(holidaySpan);
+                    dayCell.appendChild(dayHeader);
+
+                    const todoInput = document.createElement('div');
+                    todoInput.className = 'todo-input';
+                    todoInput.contentEditable = 'true';
+                    todoInput.addEventListener('paste', function(e) {
+                        e.preventDefault();
+                        const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+                        document.execCommand('insertText', false, text);
+                    });
+
+                    dayCell.appendChild(todoInput);
+                    weekRow.appendChild(dayCell);
+                }
+                daysDiv.appendChild(weekRow);
+            }
+
+            gridDiv.appendChild(daysDiv);
+            pageDiv.appendChild(gridDiv);
+            calendarContainer.appendChild(pageDiv);
+        }
+
+        // 啟動程式
+        init();
+    </script>
+</body>
+</html>
