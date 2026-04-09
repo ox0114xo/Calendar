@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A4 滿版月曆生成器 - 待辦輸入與假日底色版</title>
+    <style>
+        /* 定義可動態調整邊距的 CSS 變數 (統一一個變數) */
+        :root {
+            --page-padding: 5mm;
+        }
+
+        /* 基本重置與字體 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+        }
+
+        body {
+            background-color: #555;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* 控制面板 (列印時會隱藏) */
+        .controls {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .controls select, .controls button, .controls input[type="number"] {
+            padding: 6px 10px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .controls input[type="number"] {
+            width: 70px;
+        }
+
+        .controls button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .controls button:hover {
+            background-color: #45a049;
+        }
+
+        .btn-secondary {
+            background-color: #008CBA !important;
+        }
+
+        .btn-secondary:hover {
+            background-color: #007bb5 !important;
+        }
+
+        /* 邊距調整區塊 */
+        .margin-settings {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 15px;
+        }
+
+        /* 月份勾選區塊 */
+        .month-selectors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .month-selectors label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 5px;
+            background: #f4f4f4;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        /* 月曆容器 (容納多個頁面) */
+        #calendarContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            align-items: center;
+        }
+
+        /* A4 紙張設定 (螢幕預覽用，加入動態變數與 RWD 響應式) */
+        .page {
+            width: 100%;
+            max-width: 210mm;
+            aspect-ratio: 210 / 297;
+            background-color: #eeeeee;
+            /* 使用單一 CSS 變數控制四邊距 */
+            padding: var(--page-padding);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 月曆標題 */
+        .calendar-header {
+            text-align: center;
+            font-size: 28px;
+            font-weight: normal;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        /* 月曆網格外框 */
+        .calendar-grid {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #888;
+            border-left: 1px solid #888;
+        }
+
+        /* 星期列表頭 */
+        .weekdays {
+            display: flex;
+        }
+
+        .weekday {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            font-size: 15px;
+            font-weight: normal;
+            color: #333;
+            border-right: 1px solid #888;
+            border-bottom: 1px solid #888;
+        }
+        
+        .weekday.weekend {
+            color: #d9534f;
+        }
+
+        /* 日期列區域 */
+        .days {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .week-row {
+            display: flex;
+            flex: 1;
+        }
+
+        /* 日期格子 (改為 flex column 以容納待辦事項) */
+        .day-cell {
+            flex: 1;
+            border-right: 1px solid #888;
+            border-bottom: 1px solid #888;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: transparent;
+            transition: background-color 0.3s;
+        }
+
+        /* 勾選顯示假日後，假日格子的淺紅色底色 */
+        #calendarContainer.show-holidays-mode .day-cell.is-holiday {
+            background-color: #fff0f0;
+        }
+
+        /* 日期與假日標籤的頭部區域 */
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 4px;
+        }
+
+        .day-number {
+            font-size: 16px;
+            color: #333;
+        }
+
+        /* 假日文字與顏色 (包含 50% 透明度) */
+        .holiday-text {
+            font-size: 11px;
+            color: #d9534f;
+            opacity: 0.5; /* 假期字透明度 50% */
+            text-align: right;
+            line-height: 1.2;
+            word-break: break-all;
+        }
+
+        .is-holiday .day-number {
+            color: #d9534f;
+        }
+
+        /* 待辦事項輸入區 */
+        .todo-input {
+            flex-grow: 1;
+            outline: none;
+            font-size: 13px;
+            color: #444;
+            line-height: 1.4;
+            overflow: hidden;
+            word-break: break-all;
+            /* 預設些微透明，點擊時清楚顯示可輸入 */
+            cursor: text;
+        }
+
+        .todo-input:focus {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 非本月日期的文字顏色設定為淡色 */
+        .other-month .day-number {
+            color: #aaa;
+        }
+        .other-month .holiday-text {
+            color: #e59b99;
+        }
+
+        /* --- 手機版螢幕樣式調整 --- */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .controls { padding: 15px; }
+            .margin-settings { justify-content: space-between; }
+            .month-selectors label { flex: 1 1 22%; justify-content: center; font-size: 14px; }
+            .calendar-header { font-size: 18px; margin-bottom: 5px; }
+            .weekday { font-size: 10px; padding: 4px 0; }
+            .day-number { font-size: 12px; }
+            .holiday-text { font-size: 9px; }
+            .todo-input { font-size: 10px; }
+            .day-cell { padding: 4px; }
+        }
+
+        /* --- 列印專用的 CSS 樣式 --- */
+        @media print {
+            body {
+                background-color: transparent;
+                padding: 0;
+            }
+            .controls {
+                display: none;
+            }
+            #calendarContainer {
+                gap: 0;
+            }
+            @page {
+                size: A4 portrait;
+                margin: 0; /* 強制消除預設頁首頁尾邊界 */
+            }
+            .page {
+                box-shadow: none;
+                width: 210mm !important;
+                height: 297mm !important;
+                aspect-ratio: auto;
+                /* 列印時套用自訂邊距變數 */
+                padding: var(--page-padding) !important;
+                margin: 0;
+                page-break-after: always;
+                background-color: #eeeeee !important; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .page:last-child {
+                page-break-after: auto;
+            }
+            
+            /* 強制保留假日淺紅底色 */
+            #calendarContainer.show-holidays-mode .day-cell.is-holiday {
+                background-color: #fff0f0 !important;
+            }
+
+            /* 強制還原列印時的字體，不受手機版影響 */
+            .calendar-header { font-size: 28px !important; margin-bottom: 8px !important; }
+            .weekday { font-size: 15px !important; padding: 8px 0 !important; }
+            .day-number { font-size: 16px !important; }
+            .holiday-text { font-size: 11px !important; opacity: 0.5 !important; } /* 確保列印也是 50% 透明 */
+            .todo-input { font-size: 13px !important; }
+            .day-cell { padding: 6px !important; }
+            .todo-input:empty::before { content: ""; } /* 隱藏未輸入的提示 (如果有的話) */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls no-print">
+        <div class="control-row">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="yearSelect"></select>
+                <span style="font-size:16px;">年</span>
+            </div>
+            
+            <label style="display:flex; align-items:center; gap:5px; margin-left: 10px; cursor: pointer; font-weight: bold;">
+                <input type="checkbox" id="showHolidays" checked>
+                顯示台灣假日
+            </label>
+
+            <button id="selectAllBtn" class="btn-secondary" style="margin-left: auto;">全選 / 全不選</button>
+            <button onclick="window.print()">列印勾選月份</button>
+        </div>
+
+        <div class="control-row margin-settings">
+            <span>邊界設定 (mm)：</span>
+            <label>四邊距 <input type="number" id="marginAll" value="5" min="0" max="50"></label>
+        </div>
+
+        <div class="month-selectors" id="monthSelectors">
+            </div>
+    </div>
+
+    <div id="calendarContainer">
+        <div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">載入中...</div>
+    </div>
+
+    <script>
+        const yearSelect = document.getElementById('yearSelect');
+        const monthSelectors = document.getElementById('monthSelectors');
+        const calendarContainer = document.getElementById('calendarContainer');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const showHolidaysCheckbox = document.getElementById('showHolidays');
+        const marginInput = document.getElementById('marginAll');
+
+        const chineseMonths = ["", "一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+        const daysOfWeek = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+
+        // 假日快取物件，避免重複發送 API 請求
+        const holidayCache = {};
+
+        // 初始化
+        function init() {
+            // 1. 初始化年份選單
+            const currentYear = new Date().getFullYear();
+            for (let i = currentYear - 10; i <= currentYear + 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                yearSelect.appendChild(option);
+            }
+            yearSelect.value = 2026;
+
+            // 2. 初始化月份勾選框
+            for (let i = 1; i <= 12; i++) {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = i;
+                checkbox.className = 'month-checkbox';
+                if (i === 5) checkbox.checked = true; // 預設 5 月
+                
+                checkbox.addEventListener('change', generateCalendars);
+                
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(` ${i}月`));
+                monthSelectors.appendChild(label);
+            }
+
+            // 3. 綁定事件
+            selectAllBtn.addEventListener('click', toggleAllMonths);
+            yearSelect.addEventListener('change', generateCalendars);
+            showHolidaysCheckbox.addEventListener('change', generateCalendars);
+            marginInput.addEventListener('input', updateMargin);
+
+            // 首次渲染
+            updateMargin();
+            generateCalendars();
+        }
+
+        // 全選/全不選邏輯
+        let isAllSelected = false;
+        function toggleAllMonths() {
+            isAllSelected = !isAllSelected;
+            const checkboxes = document.querySelectorAll('.month-checkbox');
+            checkboxes.forEach(cb => cb.checked = isAllSelected);
+            generateCalendars();
+        }
+
+        // 動態更新 CSS 變數以統一調整四周邊距
+        function updateMargin() {
+            document.documentElement.style.setProperty('--page-padding', marginInput.value + 'mm');
+        }
+
+        // 從開放資料 API 獲取台灣假日
+        async function fetchTaiwanHolidays(year) {
+            if (holidayCache[year]) return holidayCache[year];
+            
+            try {
+                // 使用 ruyut/TaiwanCalendar GitHub Pages API
+                const response = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
+                if (!response.ok) throw new Error('API fetch error');
+                
+                const data = await response.json();
+                const holidays = {};
+                
+                data.forEach(item => {
+                    if (item.isHoliday && item.description) {
+                        const y = item.date.substring(0, 4);
+                        const m = parseInt(item.date.substring(4, 6), 10);
+                        const d = parseInt(item.date.substring(6, 8), 10);
+                        holidays[`${y}-${m}-${d}`] = item.description;
+                    }
+                });
+                
+                holidayCache[year] = holidays;
+                return holidays;
+            } catch (error) {
+                console.warn(`無法取得 ${year} 年假日資料:`, error);
+                return {};
+            }
+        }
+
+        // 核心功能：生成選中月份的日曆
+        async function generateCalendars() {
+            const year = parseInt(yearSelect.value);
+            const checkboxes = document.querySelectorAll('.month-checkbox:checked');
+
+            if (checkboxes.length === 0) {
+                calendarContainer.innerHTML = '<div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">請在上方至少勾選一個月份以產生月曆。</div>';
+                return;
+            }
+
+            // 控制是否加上顯示假日底色的 class
+            if (showHolidaysCheckbox.checked) {
+                calendarContainer.classList.add('show-holidays-mode');
+            } else {
+                calendarContainer.classList.remove('show-holidays-mode');
+            }
+
+            if (showHolidaysCheckbox.checked && !holidayCache[year]) {
+                 calendarContainer.innerHTML = '<div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">正在載入假日資料...</div>';
+            }
+
+            // 準備假日資料
+            let holidaysData = {};
+            if (showHolidaysCheckbox.checked) {
+                holidaysData = await fetchTaiwanHolidays(year);
+            }
+
+            calendarContainer.innerHTML = ''; // 清空準備重繪
+
+            checkboxes.forEach(cb => {
+                const month = parseInt(cb.value);
+                createMonthPage(year, month, holidaysData);
+            });
+        }
+
+        // 負責產生單個月份 DOM 結構
+        function createMonthPage(year, month, holidaysData) {
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'calendar-header';
+            headerDiv.textContent = `${chineseMonths[month]} ${year}`;
+            pageDiv.appendChild(headerDiv);
+
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'calendar-grid';
+
+            // 星期表頭
+            const weekdaysDiv = document.createElement('div');
+            weekdaysDiv.className = 'weekdays';
+            daysOfWeek.forEach((dayText, index) => {
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'weekday';
+                if (index === 5 || index === 6) dayDiv.classList.add('weekend');
+                dayDiv.textContent = dayText;
+                weekdaysDiv.appendChild(dayDiv);
+            });
+            gridDiv.appendChild(weekdaysDiv);
+
+            const daysDiv = document.createElement('div');
+            daysDiv.className = 'days';
+
+            const firstDayDate = new Date(year, month - 1, 1);
+            let firstDayOfWeek = firstDayDate.getDay();
+            if (firstDayOfWeek === 0) firstDayOfWeek = 7;
+
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const daysInPrevMonth = new Date(year, month - 1, 0).getDate();
+
+            let dateCounter = 1;
+            let nextMonthCounter = 1;
+            let prevMonthCounter = daysInPrevMonth - firstDayOfWeek + 2;
+
+            for (let row = 0; row < 6; row++) {
+                const weekRow = document.createElement('div');
+                weekRow.className = 'week-row';
+
+                for (let col = 1; col <= 7; col++) {
+                    const dayCell = document.createElement('div');
+                    dayCell.className = 'day-cell';
+
+                    const dayHeader = document.createElement('div');
+                    dayHeader.className = 'day-header';
+                    
+                    const daySpan = document.createElement('span');
+                    daySpan.className = 'day-number';
+
+                    const holidaySpan = document.createElement('span');
+                    holidaySpan.className = 'holiday-text';
+
+                    let currentCellDate = "";
+                    let isCurrentMonth = false;
+
+                    if (row === 0 && col < firstDayOfWeek) {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = prevMonthCounter;
+                        currentCellDate = `${month === 1 ? year - 1 : year}-${month === 1 ? 12 : month - 1}-${prevMonthCounter}`;
+                        prevMonthCounter++;
+                    } else if (dateCounter <= daysInMonth) {
+                        daySpan.textContent = dateCounter;
+                        currentCellDate = `${year}-${month}-${dateCounter}`;
+                        isCurrentMonth = true;
+                        
+                        if (col === 6 || col === 7) {
+                            dayCell.classList.add('is-holiday');
+                        }
+                        dateCounter++;
+                    } else {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = nextMonthCounter;
+                        currentCellDate = `${month === 12 ? year + 1 : year}-${month === 12 ? 1 : month + 1}-${nextMonthCounter}`;
+                        nextMonthCounter++;
+                    }
+
+                    if (holidaysData[currentCellDate]) {
+                        holidaySpan.textContent = holidaysData[currentCellDate];
+                        if (isCurrentMonth) dayCell.classList.add('is-holiday');
+                    }
+
+                    dayHeader.appendChild(daySpan);
+                    dayHeader.appendChild(holidaySpan);
+                    dayCell.appendChild(dayHeader);
+
+                    const todoInput = document.createElement('div');
+                    todoInput.className = 'todo-input';
+                    todoInput.contentEditable = 'true';
+                    todoInput.addEventListener('paste', function(e) {
+                        e.preventDefault();
+                        const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+                        document.execCommand('insertText', false, text);
+                    });
+
+                    dayCell.appendChild(todoInput);
+                    weekRow.appendChild(dayCell);
+                }
+                daysDiv.appendChild(weekRow);
+            }
+
+            gridDiv.appendChild(daysDiv);
+            pageDiv.appendChild(gridDiv);
+            calendarContainer.appendChild(pageDiv);
+        }
+
+        // 啟動程式
+        init();
+    </script>
+</body>
+</html>
