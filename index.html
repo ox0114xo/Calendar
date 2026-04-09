@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 滿版月曆生成器 - 排版優化版</title>
+    <title>A4 滿版月曆生成器 - 排版優化與手機列印提示版</title>
     <style>
         /* 定義可動態調整邊距的 CSS 變數 */
         :root {
@@ -27,7 +27,7 @@
         }
 
         /* =========================================
-           控制面板 UI 設計 (全新優化)
+           控制面板 UI 設計
            ========================================= */
         .controls {
             background-color: #fff;
@@ -116,7 +116,7 @@
             accent-color: #4CAF50;
         }
 
-        /* 月份勾選區塊 (Grid 網格排版，自動對齊) */
+        /* 月份勾選區塊 */
         .month-selectors {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
@@ -152,24 +152,15 @@
         @media (max-width: 768px) {
             body { padding: 10px; }
             .controls { padding: 15px; gap: 12px; }
-            
-            /* 讓年份與列印按鈕上下排列，按鈕滿版好按 */
             .header-row { flex-direction: column; align-items: stretch; gap: 12px; }
             .print-btn-wrapper button { width: 100%; padding: 12px !important; font-size: 16px !important; }
-            
-            /* 選項改為上下整齊排列 */
             .options-row { flex-direction: column; align-items: flex-start; gap: 12px; }
-            
-            /* 邊界設定保持水平左右對齊 */
             .margin-row { justify-content: space-between; width: 100%; }
-            
-            /* 月份改為 4 欄網格，12個月剛好 3 列 */
             .month-selectors { grid-template-columns: repeat(4, 1fr); gap: 8px; }
             .month-selectors label { font-size: 14px; padding: 8px 2px; }
         }
 
         @media (max-width: 400px) {
-            /* 若螢幕極小則改為 3 欄 */
             .month-selectors { grid-template-columns: repeat(3, 1fr); }
         }
 
@@ -338,7 +329,7 @@
                 <span style="font-size:16px; font-weight: bold; color: #333;">年</span>
             </div>
             <div class="print-btn-wrapper">
-                <button onclick="window.print()">🖨️ 列印勾選月份</button>
+                <button onclick="triggerPrint()">🖨️ 列印勾選月份</button>
             </div>
         </div>
 
@@ -360,7 +351,7 @@
         <div class="control-section margin-row">
             <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
             <label class="checkbox-label" style="font-weight: normal;">
-                四邊距 <input type="number" id="marginAll" value="1" min="0" max="50">
+                四邊距 <input type="number" id="marginAll" value="5" min="0" max="50">
             </label>
         </div>
 
@@ -391,6 +382,15 @@
         
         // 假日快取物件，避免重複發送 API 請求
         const holidayCache = {};
+
+        // 自訂列印函式：加入手機偵測與提示
+        function triggerPrint() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                alert("提醒：由於手機系統限制，若沒有跳出列印畫面，請點擊瀏覽器選單的「分享」或「三個點」，手動選擇「列印」或「匯出為 PDF」。\n\n(強烈建議使用電腦瀏覽器開啟以獲得最佳列印效果)");
+            }
+            window.print();
+        }
 
         // 初始化
         function init() {
