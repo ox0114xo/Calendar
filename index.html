@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 滿版月曆生成器 - 排版優化與手機列印提示版</title>
+    <title>A4 滿版月曆生成器 - 排版修復版</title>
     <style>
-        /* 定義可動態調整邊距的 CSS 變數 */
+        /* 定義可動態調整邊距的 CSS 變數，預設改為 1mm */
         :root {
-            --page-padding: 5mm;
+            --page-padding: 1mm;
         }
 
         /* 基本重置與字體 */
@@ -290,27 +290,45 @@
             .day-cell { padding: 4px; }
         }
 
-        /* --- 列印專用 CSS --- */
+        /* --- 列印專用 CSS (防跑版修復) --- */
         @media print {
-            body { background-color: transparent; padding: 0; }
+            body { background-color: transparent; padding: 0; margin: 0; }
             .controls { display: none; }
             #calendarContainer { gap: 0; }
-            @page { size: A4 portrait; margin: 0; }
+            @page { 
+                size: A4 portrait; 
+                margin: 0; 
+            }
             .page {
                 box-shadow: none;
                 width: 210mm !important;
-                height: 297mm !important;
+                /* 微調高度為 296mm 並隱藏溢出，強制避免被擠到第二頁 */
+                height: 296mm !important;
+                max-height: 297mm !important;
                 aspect-ratio: auto;
                 padding: var(--page-padding) !important;
-                margin: 0;
+                margin: 0 auto;
                 page-break-after: always;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                overflow: hidden;
                 background-color: #eeeeee !important; 
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             .page:last-child { page-break-after: auto; }
+            
+            /* 避免網格內部標題斷層 */
+            .calendar-header { 
+                font-size: 28px !important; 
+                margin-bottom: 8px !important; 
+                page-break-after: avoid;
+            }
+            .calendar-grid {
+                page-break-before: avoid;
+            }
+            
             #calendarContainer.show-holidays-mode .day-cell.is-holiday { background-color: #fff0f0 !important; }
-            .calendar-header { font-size: 28px !important; margin-bottom: 8px !important; }
             .weekday { font-size: 15px !important; padding: 8px 0 !important; }
             .day-number { font-size: 16px !important; }
             .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
@@ -351,7 +369,7 @@
         <div class="control-section margin-row">
             <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
             <label class="checkbox-label" style="font-weight: normal;">
-                四邊距 <input type="number" id="marginAll" value="5" min="0" max="50">
+                四邊距 <input type="number" id="marginAll" value="1" min="0" max="50">
             </label>
         </div>
 
@@ -387,7 +405,7 @@
         function triggerPrint() {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             if (isMobile) {
-                alert("提醒：由於手機系統限制，若沒有跳出列印畫面，請點擊瀏覽器選單的「分享」或「三個點」，手動選擇「列印」或「匯出為 PDF」。\n\n(強烈建議使用電腦瀏覽器開啟以獲得最佳列印效果)");
+                alert("提醒：手機版 Google Chrome 等瀏覽器會封鎖此按鈕的自動彈出功能。\n\n請直接點擊瀏覽器右上角選單 (⋮) ➔ 選擇「分享」 ➔ 點擊「列印」來進行操作。");
             }
             window.print();
         }
