@@ -360,6 +360,655 @@
         <div class="control-section margin-row">
             <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
             <label class="checkbox-label" style="font-weight: normal;">
+                四邊距 <input type="number" id="marginAll" value="1" min="0" max="50">
+            </label>
+        </div>
+
+        <hr class="divider">
+
+        <div class="control-section">
+            <span style="font-weight: bold; color: #333;">選擇列印月份</span>
+            <button id="selectAllBtn" class="btn-secondary btn-small">全選 / 全不選</button>
+        </div>
+        <div class="month-selectors" id="monthSelectors">
+            </div>
+    </div>
+
+    <div id="calendarContainer">
+        <div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">載入中...</div>
+    </div>
+
+    <script>
+        const yearSelect = document.getElementById('yearSelect');
+        const monthSelectors = document.getElementById('monthSelectors');
+        const calendarContainer = document.getElementById('calendarContainer');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const showHolidaysCheckbox = document.getElementById('showHolidays');
+        const sundayFirstCheckbox = document.getElementById('sundayFirst');
+        const marginInput = document.getElementById('marginAll');
+
+        const chineseMonths = ["", "一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+        
+        // 假日快取物件，避免重複發送 API 請求
+        const holidayCache = {};
+
+        // 初始化
+        function init() {
+            // 1. 初始化年份選單
+            const currentYear = new Date().getFullYear();
+            for (let i = currentYear - 10; i <= currentYear + 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                yearSelect.appendChild(option);
+            }
+            yearSelect.value = 2026;
+
+            // 2. 初始化月份勾選框
+            for (let i = 1; i <= 12; i++) {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = i;
+                checkbox.className = 'month-checkbox';
+                if (i === 5) checkbox.checked = true; // 預設 5 月
+                
+                checkbox.addEventListener('change', generateCalendars);
+                
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(` ${i}月`));
+                monthSelectors.appendChild(label);
+            }
+
+            // 3. 綁定事件
+            selectAllBtn.addEventListener('click', toggleAllMonths);
+            yearSelect.addEventListener('change', generateCalendars);
+            showHolidaysCheckbox.addEventListener('change', generateCalendars);
+            sundayFirstCheckbox.addEventListener('change', generateCalendars);
+            marginInput.addEventListener('input', updateMargin);
+
+            // 首次渲染
+            updateMargin();
+            generateCalendars();
+        }
+
+        // 全選/全不選邏輯
+        let isAllSelected = false;
+        function toggleAllMonths() {
+            isAllSelected = !isAllSelected;
+            const checkboxes = document.querySelectorAll('.month-checkbox');
+            checkboxes.forEach(cb => cb.checked = isAllSelected);
+            generateCalendars();
+        }
+
+        // 動態更新 CSS 變數以統一調整四周邊距
+        function updateMargin() {
+            document.documentElement.style.setProperty('--page-padding', marginInput.value + 'mm');
+        }
+
+        // 從開放資料 API 獲取台灣假日
+        async function fetchTaiwanHolidays(year) {
+            if (holidayCache[year]) return holidayCache[year];
+            
+            try {
+                // 使用 ruyut/TaiwanCalendar GitHub Pages API
+                const response = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
+                if (!response.ok) throw new Error('API fetch error');
+                
+                const data = await response.json();
+                const holidays = {};
+                
+                data.forEach(item => {
+                    if (item.isHoliday && item.description) {
+                        const y = item.date.substring(0, 4);
+                        const m = parseInt(item.date.substring(4, 6), 10);
+                        const d = parseInt(item.date.substring(6, 8), 10);
+                        holidays[`${y}-${m}-${d}`] = item.description;
+                    }
+                });
+                
+                holidayCache[year] = holidays;
+                return holidays;
+            } catch (error) {
+                console.warn(`無法取得 ${year} 年假日資料:`, error);
+                return {};
+            }
+        }
+
+        // 核心功能：生成選中月份的日曆
+        async function generateCalendars() {
+            const year = parseInt(yearSelect.value);
+            const checkboxes = document.querySelectorAll('.month-checkbox:checked');
+            const isSundayFirst = sundayFirstCheckbox.checked;
+
+            if (checkboxes.length === 0) {
+                calendarContainer.innerHTML = '<div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">請在上方至少勾選一個月份以產生月曆。</div>';
+                return;
+            }
+
+            // 控制是否加上顯示假日底色的 class
+            if (showHolidaysCheckbox.checked) {
+                calendarContainer.classList.add('show-holidays-mode');
+            } else {
+                calendarContainer.classList.remove('show-holidays-mode');
+            }
+
+            if (showHolidaysCheckbox.checked && !holidayCache[year]) {
+                 calendarContainer.innerHTML = '<div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">正在載入假日資料...</div>';
+            }
+
+            // 準備假日資料
+            let holidaysData = {};
+            if (showHolidaysCheckbox.checked) {
+                holidaysData = await fetchTaiwanHolidays(year);
+            }
+
+            calendarContainer.innerHTML = ''; // 清空準備重繪
+
+            checkboxes.forEach(cb => {
+                const month = parseInt(cb.value);
+                createMonthPage(year, month, holidaysData, isSundayFirst);
+            });
+        }
+
+        // 負責產生單個月份 DOM 結構
+        function createMonthPage(year, month, holidaysData, isSundayFirst) {
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'calendar-header';
+            headerDiv.textContent = `${chineseMonths[month]} ${year}`;
+            pageDiv.appendChild(headerDiv);
+
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'calendar-grid';
+
+            // 星期表頭 (根據起始日設定)
+            const weekdaysDiv = document.createElement('div');
+            weekdaysDiv.className = 'weekdays';
+            const currentDaysOfWeek = isSundayFirst ? 
+                ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"] :
+                ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+
+            currentDaysOfWeek.forEach((dayText, index) => {
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'weekday';
+                
+                // 判斷表頭的週末變紅字
+                if (isSundayFirst) {
+                    if (index === 0 || index === 6) dayDiv.classList.add('weekend');
+                } else {
+                    if (index === 5 || index === 6) dayDiv.classList.add('weekend');
+                }
+                
+                dayDiv.textContent = dayText;
+                weekdaysDiv.appendChild(dayDiv);
+            });
+            gridDiv.appendChild(weekdaysDiv);
+
+            const daysDiv = document.createElement('div');
+            daysDiv.className = 'days';
+
+            const firstDayDate = new Date(year, month - 1, 1);
+            let firstDayOfWeek = firstDayDate.getDay(); // 0(Sun) ~ 6(Sat)
+            
+            // 根據起始日重新計算偏移量
+            if (isSundayFirst) {
+                // 如果星期日是第一天，第一欄對應 1，剛好 getDay()+1
+                firstDayOfWeek = firstDayOfWeek + 1; 
+            } else {
+                // 如果星期一是第一天，星期日(0)要移到最後一欄(7)
+                if (firstDayOfWeek === 0) firstDayOfWeek = 7;
+            }
+
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const daysInPrevMonth = new Date(year, month - 1, 0).getDate();
+
+            let dateCounter = 1;
+            let nextMonthCounter = 1;
+            let prevMonthCounter = daysInPrevMonth - firstDayOfWeek + 2;
+
+            for (let row = 0; row < 6; row++) {
+                const weekRow = document.createElement('div');
+                weekRow.className = 'week-row';
+
+                for (let col = 1; col <= 7; col++) {
+                    const dayCell = document.createElement('div');
+                    dayCell.className = 'day-cell';
+
+                    const dayHeader = document.createElement('div');
+                    dayHeader.className = 'day-header';
+                    
+                    const daySpan = document.createElement('span');
+                    daySpan.className = 'day-number';
+
+                    const holidaySpan = document.createElement('span');
+                    holidaySpan.className = 'holiday-text';
+
+                    let currentCellDate = "";
+                    let isCurrentMonth = false;
+
+                    if (row === 0 && col < firstDayOfWeek) {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = prevMonthCounter;
+                        currentCellDate = `${month === 1 ? year - 1 : year}-${month === 1 ? 12 : month - 1}-${prevMonthCounter}`;
+                        prevMonthCounter++;
+                    } else if (dateCounter <= daysInMonth) {
+                        daySpan.textContent = dateCounter;
+                        currentCellDate = `${year}-${month}-${dateCounter}`;
+                        isCurrentMonth = true;
+                        
+                        // 判斷實體日期的週末並加上 is-holiday class
+                        if (isSundayFirst) {
+                            if (col === 1 || col === 7) dayCell.classList.add('is-holiday');
+                        } else {
+                            if (col === 6 || col === 7) dayCell.classList.add('is-holiday');
+                        }
+                        
+                        dateCounter++;
+                    } else {
+                        dayCell.classList.add('other-month');
+                        daySpan.textContent = nextMonthCounter;
+                        currentCellDate = `${month === 12 ? year + 1 : year}-${month === 12 ? 1 : month + 1}-${nextMonthCounter}`;
+                        nextMonthCounter++;
+                    }
+
+                    if (holidaysData[currentCellDate]) {
+                        holidaySpan.textContent = holidaysData[currentCellDate];
+                        if (isCurrentMonth) dayCell.classList.add('is-holiday');
+                    }
+
+                    dayHeader.appendChild(daySpan);
+                    dayHeader.appendChild(holidaySpan);
+                    dayCell.appendChild(dayHeader);
+
+                    const todoInput = document.createElement('div');
+                    todoInput.className = 'todo-input';
+                    todoInput.contentEditable = 'true';
+                    todoInput.addEventListener('paste', function(e) {
+                        e.preventDefault();
+                        const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+                        document.execCommand('insertText', false, text);
+                    });
+
+                    dayCell.appendChild(todoInput);
+                    weekRow.appendChild(dayCell);
+                }
+                daysDiv.appendChild(weekRow);
+            }
+
+            gridDiv.appendChild(daysDiv);
+            pageDiv.appendChild(gridDiv);
+            calendarContainer.appendChild(pageDiv);
+        }
+
+        // 啟動程式
+        init();
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A4 滿版月曆生成器 - 排版優化版</title>
+    <style>
+        /* 定義可動態調整邊距的 CSS 變數 */
+        :root {
+            --page-padding: 5mm;
+        }
+
+        /* 基本重置與字體 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+        }
+
+        body {
+            background-color: #555;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* =========================================
+           控制面板 UI 設計 (全新優化)
+           ========================================= */
+        .controls {
+            background-color: #fff;
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .options-row {
+            justify-content: flex-start;
+            gap: 30px;
+        }
+
+        .divider {
+            border: 0;
+            border-top: 1px solid #eaeaea;
+            width: 100%;
+            margin: 0;
+        }
+
+        /* 統一表單元素風格 */
+        .controls select, .controls input[type="number"], .controls button {
+            padding: 8px 12px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .controls select:focus, .controls input[type="number"]:focus {
+            border-color: #4CAF50;
+        }
+
+        .controls input[type="number"] {
+            width: 70px;
+            text-align: center;
+        }
+
+        .controls button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        .controls button:hover { background-color: #45a049; }
+        .controls button:active { transform: scale(0.98); }
+
+        .btn-secondary { background-color: #008CBA !important; }
+        .btn-secondary:hover { background-color: #007bb5 !important; }
+        .btn-small { padding: 6px 10px !important; font-size: 14px !important; }
+
+        /* 勾選框文字標籤 */
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 15px;
+            user-select: none;
+            color: #333;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #4CAF50;
+        }
+
+        /* 月份勾選區塊 (Grid 網格排版，自動對齊) */
+        .month-selectors {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            width: 100%;
+        }
+
+        .month-selectors label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            padding: 10px 5px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            transition: background 0.2s;
+            user-select: none;
+            color: #444;
+        }
+
+        .month-selectors label:hover { background: #eee; }
+        .month-selectors input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #008CBA;
+        }
+
+        /* --- 手機版專屬格局優化 --- */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .controls { padding: 15px; gap: 12px; }
+            
+            /* 讓年份與列印按鈕上下排列，按鈕滿版好按 */
+            .header-row { flex-direction: column; align-items: stretch; gap: 12px; }
+            .print-btn-wrapper button { width: 100%; padding: 12px !important; font-size: 16px !important; }
+            
+            /* 選項改為上下整齊排列 */
+            .options-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            
+            /* 邊界設定保持水平左右對齊 */
+            .margin-row { justify-content: space-between; width: 100%; }
+            
+            /* 月份改為 4 欄網格，12個月剛好 3 列 */
+            .month-selectors { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+            .month-selectors label { font-size: 14px; padding: 8px 2px; }
+        }
+
+        @media (max-width: 400px) {
+            /* 若螢幕極小則改為 3 欄 */
+            .month-selectors { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        /* =========================================
+           月曆頁面設計 (A4 顯示與列印)
+           ========================================= */
+        #calendarContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .page {
+            width: 100%;
+            max-width: 210mm;
+            aspect-ratio: 210 / 297;
+            background-color: #eeeeee;
+            padding: var(--page-padding);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .calendar-header {
+            text-align: center;
+            font-size: 28px;
+            font-weight: normal;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .calendar-grid {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #888;
+            border-left: 1px solid #888;
+        }
+
+        .weekdays { display: flex; }
+
+        .weekday {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            font-size: 15px;
+            font-weight: normal;
+            color: #333;
+            border-right: 1px solid #888;
+            border-bottom: 1px solid #888;
+        }
+        
+        .weekday.weekend { color: #d9534f; }
+
+        .days {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .week-row { display: flex; flex: 1; }
+
+        .day-cell {
+            flex: 1;
+            border-right: 1px solid #888;
+            border-bottom: 1px solid #888;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: transparent;
+            transition: background-color 0.3s;
+        }
+
+        /* 假日底色 */
+        #calendarContainer.show-holidays-mode .day-cell.is-holiday {
+            background-color: #fff0f0;
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 4px;
+        }
+
+        .day-number {
+            font-size: 16px;
+            color: #333;
+        }
+
+        .holiday-text {
+            font-size: 11px;
+            color: #d9534f;
+            opacity: 0.5;
+            text-align: right;
+            line-height: 1.2;
+            word-break: break-all;
+        }
+
+        .is-holiday .day-number { color: #d9534f; }
+
+        .todo-input {
+            flex-grow: 1;
+            outline: none;
+            font-size: 13px;
+            color: #444;
+            line-height: 1.4;
+            overflow: hidden;
+            word-break: break-all;
+            cursor: text;
+        }
+
+        .todo-input:focus { background-color: rgba(255, 255, 255, 0.5); }
+
+        .other-month .day-number { color: #aaa; }
+        .other-month .holiday-text { color: #e59b99; }
+
+        @media (max-width: 768px) {
+            .calendar-header { font-size: 18px; margin-bottom: 5px; }
+            .weekday { font-size: 10px; padding: 4px 0; }
+            .day-number { font-size: 12px; }
+            .holiday-text { font-size: 9px; }
+            .todo-input { font-size: 10px; }
+            .day-cell { padding: 4px; }
+        }
+
+        /* --- 列印專用 CSS --- */
+        @media print {
+            body { background-color: transparent; padding: 0; }
+            .controls { display: none; }
+            #calendarContainer { gap: 0; }
+            @page { size: A4 portrait; margin: 0; }
+            .page {
+                box-shadow: none;
+                width: 210mm !important;
+                height: 297mm !important;
+                aspect-ratio: auto;
+                padding: var(--page-padding) !important;
+                margin: 0;
+                page-break-after: always;
+                background-color: #eeeeee !important; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .page:last-child { page-break-after: auto; }
+            #calendarContainer.show-holidays-mode .day-cell.is-holiday { background-color: #fff0f0 !important; }
+            .calendar-header { font-size: 28px !important; margin-bottom: 8px !important; }
+            .weekday { font-size: 15px !important; padding: 8px 0 !important; }
+            .day-number { font-size: 16px !important; }
+            .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
+            .todo-input { font-size: 13px !important; }
+            .day-cell { padding: 6px !important; }
+            .todo-input:empty::before { content: ""; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls no-print">
+        <div class="control-section header-row">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="yearSelect"></select>
+                <span style="font-size:16px; font-weight: bold; color: #333;">年</span>
+            </div>
+            <div class="print-btn-wrapper">
+                <button onclick="window.print()">🖨️ 列印勾選月份</button>
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="control-section options-row">
+            <label class="checkbox-label">
+                <input type="checkbox" id="showHolidays" checked>
+                顯示台灣假日
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="sundayFirst">
+                星期日為第一天
+            </label>
+        </div>
+
+        <hr class="divider">
+
+        <div class="control-section margin-row">
+            <span style="font-weight: bold; color: #333;">邊界設定 (mm)</span>
+            <label class="checkbox-label" style="font-weight: normal;">
                 四邊距 <input type="number" id="marginAll" value="5" min="0" max="50">
             </label>
         </div>
