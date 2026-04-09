@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A4 滿版月曆生成器 - 待辦輸入與假日底色版</title>
+    <title>A4 滿版月曆生成器 - 待辦輸入、假日底色與起始日切換版</title>
     <style>
         /* 定義可動態調整邊距的 CSS 變數 (統一一個變數) */
         :root {
@@ -327,6 +327,11 @@
                 顯示台灣假日
             </label>
 
+            <label style="display:flex; align-items:center; gap:5px; margin-left: 10px; cursor: pointer; font-weight: bold;">
+                <input type="checkbox" id="sundayFirst">
+                星期日為第一天
+            </label>
+
             <button id="selectAllBtn" class="btn-secondary" style="margin-left: auto;">全選 / 全不選</button>
             <button onclick="window.print()">列印勾選月份</button>
         </div>
@@ -350,11 +355,11 @@
         const calendarContainer = document.getElementById('calendarContainer');
         const selectAllBtn = document.getElementById('selectAllBtn');
         const showHolidaysCheckbox = document.getElementById('showHolidays');
+        const sundayFirstCheckbox = document.getElementById('sundayFirst');
         const marginInput = document.getElementById('marginAll');
 
         const chineseMonths = ["", "一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
-        const daysOfWeek = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
-
+        
         // 假日快取物件，避免重複發送 API 請求
         const holidayCache = {};
 
@@ -390,6 +395,7 @@
             selectAllBtn.addEventListener('click', toggleAllMonths);
             yearSelect.addEventListener('change', generateCalendars);
             showHolidaysCheckbox.addEventListener('change', generateCalendars);
+            sundayFirstCheckbox.addEventListener('change', generateCalendars);
             marginInput.addEventListener('input', updateMargin);
 
             // 首次渲染
@@ -444,6 +450,7 @@
         async function generateCalendars() {
             const year = parseInt(yearSelect.value);
             const checkboxes = document.querySelectorAll('.month-checkbox:checked');
+            const isSundayFirst = sundayFirstCheckbox.checked;
 
             if (checkboxes.length === 0) {
                 calendarContainer.innerHTML = '<div style="color:white; font-size: 16px; margin-top: 50px; text-align: center;">請在上方至少勾選一個月份以產生月曆。</div>';
@@ -471,12 +478,12 @@
 
             checkboxes.forEach(cb => {
                 const month = parseInt(cb.value);
-                createMonthPage(year, month, holidaysData);
+                createMonthPage(year, month, holidaysData, isSundayFirst);
             });
         }
 
         // 負責產生單個月份 DOM 結構
-        function createMonthPage(year, month, holidaysData) {
+        function createMonthPage(year, month, holidaysData, isSundayFirst) {
             const pageDiv = document.createElement('div');
             pageDiv.className = 'page';
 
@@ -488,13 +495,24 @@
             const gridDiv = document.createElement('div');
             gridDiv.className = 'calendar-grid';
 
-            // 星期表頭
+            // 星期表頭 (根據起始日設定)
             const weekdaysDiv = document.createElement('div');
             weekdaysDiv.className = 'weekdays';
-            daysOfWeek.forEach((dayText, index) => {
+            const currentDaysOfWeek = isSundayFirst ? 
+                ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"] :
+                ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+
+            currentDaysOfWeek.forEach((dayText, index) => {
                 const dayDiv = document.createElement('div');
                 dayDiv.className = 'weekday';
-                if (index === 5 || index === 6) dayDiv.classList.add('weekend');
+                
+                // 判斷表頭的週末變紅字
+                if (isSundayFirst) {
+                    if (index === 0 || index === 6) dayDiv.classList.add('weekend');
+                } else {
+                    if (index === 5 || index === 6) dayDiv.classList.add('weekend');
+                }
+                
                 dayDiv.textContent = dayText;
                 weekdaysDiv.appendChild(dayDiv);
             });
@@ -504,8 +522,16 @@
             daysDiv.className = 'days';
 
             const firstDayDate = new Date(year, month - 1, 1);
-            let firstDayOfWeek = firstDayDate.getDay();
-            if (firstDayOfWeek === 0) firstDayOfWeek = 7;
+            let firstDayOfWeek = firstDayDate.getDay(); // 0(Sun) ~ 6(Sat)
+            
+            // 根據起始日重新計算偏移量
+            if (isSundayFirst) {
+                // 如果星期日是第一天，第一欄對應 1，剛好 getDay()+1
+                firstDayOfWeek = firstDayOfWeek + 1; 
+            } else {
+                // 如果星期一是第一天，星期日(0)要移到最後一欄(7)
+                if (firstDayOfWeek === 0) firstDayOfWeek = 7;
+            }
 
             const daysInMonth = new Date(year, month, 0).getDate();
             const daysInPrevMonth = new Date(year, month - 1, 0).getDate();
@@ -544,9 +570,13 @@
                         currentCellDate = `${year}-${month}-${dateCounter}`;
                         isCurrentMonth = true;
                         
-                        if (col === 6 || col === 7) {
-                            dayCell.classList.add('is-holiday');
+                        // 判斷實體日期的週末並加上 is-holiday class
+                        if (isSundayFirst) {
+                            if (col === 1 || col === 7) dayCell.classList.add('is-holiday');
+                        } else {
+                            if (col === 6 || col === 7) dayCell.classList.add('is-holiday');
                         }
+                        
                         dateCounter++;
                     } else {
                         dayCell.classList.add('other-month');
