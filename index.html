@@ -467,18 +467,20 @@
 
         <div class="control-section" style="gap: 20px; flex-wrap: wrap;">
             <span style="font-weight: bold; color: #333;">字體大小 (px)</span>
-            <label class="checkbox-label" style="font-weight: normal; gap: 6px;">
-                標題
-                <button class="btn-small btn-secondary" onclick="adjustFont('title', -1)">－</button>
-                <span id="titleFontDisplay" style="min-width:32px;text-align:center;font-weight:bold;">28</span>
-                <button class="btn-small btn-secondary" onclick="adjustFont('title', 1)">＋</button>
-            </label>
-            <label class="checkbox-label" style="font-weight: normal; gap: 6px;">
-                日期數字
-                <button class="btn-small btn-secondary" onclick="adjustFont('date', -1)">－</button>
-                <span id="dateFontDisplay" style="min-width:32px;text-align:center;font-weight:bold;">16</span>
-                <button class="btn-small btn-secondary" onclick="adjustFont('date', 1)">＋</button>
-            </label>
+            <div style="display:flex; flex-direction:column; gap:10px; flex:1; min-width:200px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="width:56px; color:#333;">標題</span>
+                    <input type="range" id="titleFontSlider" min="10" max="60" value="28" style="flex:1;" oninput="syncFont('title','slider')">
+                    <input type="number" id="titleFontInput" min="10" max="60" value="28" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('title','input')">
+                    <span style="color:#888;font-size:13px;">px</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="width:56px; color:#333;">日期數字</span>
+                    <input type="range" id="dateFontSlider" min="8" max="40" value="16" style="flex:1;" oninput="syncFont('date','slider')">
+                    <input type="number" id="dateFontInput" min="8" max="40" value="16" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('date','input')">
+                    <span style="color:#888;font-size:13px;">px</span>
+                </div>
+            </div>
         </div>
 
         <hr class="divider">
@@ -513,15 +515,25 @@
         let titleFontSize = 28;
         let dateFontSize = 16;
 
-        function adjustFont(type, delta) {
+        function syncFont(type, source) {
             if (type === 'title') {
-                titleFontSize = Math.max(10, Math.min(60, titleFontSize + delta));
-                document.documentElement.style.setProperty('--title-font-size', titleFontSize + 'px');
-                document.getElementById('titleFontDisplay').textContent = titleFontSize;
+                const slider = document.getElementById('titleFontSlider');
+                const input  = document.getElementById('titleFontInput');
+                let val = parseInt(source === 'slider' ? slider.value : input.value) || titleFontSize;
+                val = Math.max(10, Math.min(60, val));
+                titleFontSize = val;
+                slider.value = val;
+                input.value  = val;
+                document.documentElement.style.setProperty('--title-font-size', val + 'px');
             } else {
-                dateFontSize = Math.max(8, Math.min(40, dateFontSize + delta));
-                document.documentElement.style.setProperty('--date-font-size', dateFontSize + 'px');
-                document.getElementById('dateFontDisplay').textContent = dateFontSize;
+                const slider = document.getElementById('dateFontSlider');
+                const input  = document.getElementById('dateFontInput');
+                let val = parseInt(source === 'slider' ? slider.value : input.value) || dateFontSize;
+                val = Math.max(8, Math.min(40, val));
+                dateFontSize = val;
+                slider.value = val;
+                input.value  = val;
+                document.documentElement.style.setProperty('--date-font-size', val + 'px');
             }
         }
 
@@ -530,8 +542,12 @@
             dateFontSize  = orientation === 'landscape' ? 18 : 16;
             document.documentElement.style.setProperty('--title-font-size', titleFontSize + 'px');
             document.documentElement.style.setProperty('--date-font-size', dateFontSize + 'px');
-            document.getElementById('titleFontDisplay').textContent = titleFontSize;
-            document.getElementById('dateFontDisplay').textContent = dateFontSize;
+            const ts = document.getElementById('titleFontSlider');
+            const ti = document.getElementById('titleFontInput');
+            const ds = document.getElementById('dateFontSlider');
+            const di = document.getElementById('dateFontInput');
+            if (ts) { ts.value = titleFontSize; ti.value = titleFontSize; }
+            if (ds) { ds.value = dateFontSize;  di.value = dateFontSize; }
         }
 
         // 目前方向
