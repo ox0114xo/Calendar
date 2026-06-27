@@ -553,21 +553,35 @@
         // 目前方向
         let currentOrientation = 'landscape';
 
-        // 動態 @page style 標籤，用於控制列印方向
-        const printStyleEl = document.createElement('style');
-        document.head.appendChild(printStyleEl);
+        // 用兩個靜態 style 標籤切換，比動態寫入更可靠
+        const printPortraitStyle = document.createElement('style');
+        printPortraitStyle.textContent = '@media print { @page { size: A4 portrait; margin: 0; } }';
+        document.head.appendChild(printPortraitStyle);
+
+        const printLandscapeStyle = document.createElement('style');
+        printLandscapeStyle.textContent = '@media print { @page { size: A4 landscape; margin: 0; } }';
+        printLandscapeStyle.disabled = true;
+        document.head.appendChild(printLandscapeStyle);
+
+        // beforeprint 再強制補一次，對抗 Chrome 的快取行為
+        window.addEventListener('beforeprint', () => {
+            printPortraitStyle.disabled  = (currentOrientation === 'landscape');
+            printLandscapeStyle.disabled = (currentOrientation === 'portrait');
+        });
 
         function setOrientation(orientation) {
             currentOrientation = orientation;
             applyFontDefaults(orientation);
             if (orientation === 'landscape') {
                 document.documentElement.classList.add('landscape-mode');
-                printStyleEl.textContent = '@media print { @page { size: A4 landscape; margin: 0; } }';
+                printPortraitStyle.disabled  = true;
+                printLandscapeStyle.disabled = false;
                 document.getElementById('btnLandscape').classList.add('active');
                 document.getElementById('btnPortrait').classList.remove('active');
             } else {
                 document.documentElement.classList.remove('landscape-mode');
-                printStyleEl.textContent = '@media print { @page { size: A4 portrait; margin: 0; } }';
+                printPortraitStyle.disabled  = false;
+                printLandscapeStyle.disabled = true;
                 document.getElementById('btnPortrait').classList.add('active');
                 document.getElementById('btnLandscape').classList.remove('active');
             }
