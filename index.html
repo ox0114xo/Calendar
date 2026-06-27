@@ -15,6 +15,8 @@
             --print-height: 296mm;
             --print-max-height: 297mm;
             --print-orientation: portrait;
+            --title-font-size: 28px;
+            --date-font-size: 16px;
         }
 
         /* 橫式覆寫 */
@@ -241,15 +243,9 @@
             flex-direction: column;
         }
 
-        /* 橫式時字型稍微調大 */
-        :root.landscape-mode .calendar-header {
-            font-size: 32px;
-        }
+        /* 橫式時字型稍微調大（預設值由 JS setOrientation 寫入變數） */
         :root.landscape-mode .weekday {
             font-size: 16px;
-        }
-        :root.landscape-mode .day-number {
-            font-size: 18px;
         }
         :root.landscape-mode .holiday-text {
             font-size: 12px;
@@ -260,7 +256,7 @@
 
         .calendar-header {
             text-align: center;
-            font-size: 28px;
+            font-size: var(--title-font-size);
             font-weight: normal;
             margin-bottom: 8px;
             color: #333;
@@ -322,7 +318,7 @@
         }
 
         .day-number {
-            font-size: 16px;
+            font-size: var(--date-font-size);
             color: #333;
         }
 
@@ -352,6 +348,13 @@
 
         .other-month .day-number { color: #aaa; }
         .other-month .holiday-text { color: #e59b99; }
+        .other-month { background-color: #f7f7f7 !important; }
+
+        /* 當月日期：用 inset shadow 模擬加粗邊框，不影響格線對齊 */
+        .day-cell:not(.other-month) {
+            box-shadow: inset 1px 1px 0 0 #555;
+        }
+        /* 列印也要套用 */
 
         @media (max-width: 768px) {
             .calendar-header { font-size: 18px; margin-bottom: 5px; }
@@ -400,12 +403,14 @@
             
             #calendarContainer.show-holidays-mode .day-cell.is-holiday { background-color: #fff0f0 !important; }
             .weekday { font-size: 15px !important; padding: 8px 0 !important; }
-            .day-number { font-size: 16px !important; }
+            .day-number { font-size: var(--date-font-size) !important; }
             .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
             .todo-input { font-size: 13px !important; }
             .day-cell { padding: 6px !important; background-color: #ffffff !important; }
+            .day-cell:not(.other-month) { box-shadow: inset 1px 1px 0 0 #555 !important; }
+            .other-month { background-color: #f7f7f7 !important; }
+            .calendar-header { font-size: var(--title-font-size) !important; margin-bottom: 8px !important; page-break-after: avoid; }
             :root.landscape-mode .weekday { font-size: 16px !important; }
-            :root.landscape-mode .day-number { font-size: 18px !important; }
             :root.landscape-mode .holiday-text { font-size: 12px !important; }
             :root.landscape-mode .todo-input { font-size: 14px !important; }
             .todo-input:empty::before { content: ""; }
@@ -423,10 +428,10 @@
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 <!-- 橫式/直式切換 -->
                 <div class="orientation-toggle" id="orientationToggle" title="切換橫式/直式">
-                    <button class="orient-btn active" id="btnPortrait" onclick="setOrientation('portrait')">
+                    <button class="orient-btn" id="btnPortrait" onclick="setOrientation('portrait')">
                         <svg width="14" height="18" viewBox="0 0 14 18" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="1" y="1" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>直式
                     </button>
-                    <button class="orient-btn" id="btnLandscape" onclick="setOrientation('landscape')">
+                    <button class="orient-btn active" id="btnLandscape" onclick="setOrientation('landscape')">
                         <svg width="18" height="14" viewBox="0 0 18 14" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="1" y="1" width="16" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>橫式
                     </button>
                 </div>
@@ -460,6 +465,24 @@
 
         <hr class="divider">
 
+        <div class="control-section" style="gap: 20px; flex-wrap: wrap;">
+            <span style="font-weight: bold; color: #333;">字體大小 (px)</span>
+            <label class="checkbox-label" style="font-weight: normal; gap: 6px;">
+                標題
+                <button class="btn-small btn-secondary" onclick="adjustFont('title', -1)">－</button>
+                <span id="titleFontDisplay" style="min-width:32px;text-align:center;font-weight:bold;">28</span>
+                <button class="btn-small btn-secondary" onclick="adjustFont('title', 1)">＋</button>
+            </label>
+            <label class="checkbox-label" style="font-weight: normal; gap: 6px;">
+                日期數字
+                <button class="btn-small btn-secondary" onclick="adjustFont('date', -1)">－</button>
+                <span id="dateFontDisplay" style="min-width:32px;text-align:center;font-weight:bold;">16</span>
+                <button class="btn-small btn-secondary" onclick="adjustFont('date', 1)">＋</button>
+            </label>
+        </div>
+
+        <hr class="divider">
+
         <div class="control-section">
             <span style="font-weight: bold; color: #333;">選擇列印月份</span>
             <button id="selectAllBtn" class="btn-secondary btn-small">全選 / 全不選</button>
@@ -486,8 +509,33 @@
         // 假日快取物件，避免重複發送 API 請求
         const holidayCache = {};
 
+        // 字體大小狀態
+        let titleFontSize = 28;
+        let dateFontSize = 16;
+
+        function adjustFont(type, delta) {
+            if (type === 'title') {
+                titleFontSize = Math.max(10, Math.min(60, titleFontSize + delta));
+                document.documentElement.style.setProperty('--title-font-size', titleFontSize + 'px');
+                document.getElementById('titleFontDisplay').textContent = titleFontSize;
+            } else {
+                dateFontSize = Math.max(8, Math.min(40, dateFontSize + delta));
+                document.documentElement.style.setProperty('--date-font-size', dateFontSize + 'px');
+                document.getElementById('dateFontDisplay').textContent = dateFontSize;
+            }
+        }
+
+        function applyFontDefaults(orientation) {
+            titleFontSize = orientation === 'landscape' ? 32 : 28;
+            dateFontSize  = orientation === 'landscape' ? 18 : 16;
+            document.documentElement.style.setProperty('--title-font-size', titleFontSize + 'px');
+            document.documentElement.style.setProperty('--date-font-size', dateFontSize + 'px');
+            document.getElementById('titleFontDisplay').textContent = titleFontSize;
+            document.getElementById('dateFontDisplay').textContent = dateFontSize;
+        }
+
         // 目前方向
-        let currentOrientation = 'portrait';
+        let currentOrientation = 'landscape';
 
         // 動態 @page style 標籤，用於控制列印方向
         const printStyleEl = document.createElement('style');
@@ -495,6 +543,7 @@
 
         function setOrientation(orientation) {
             currentOrientation = orientation;
+            applyFontDefaults(orientation);
             if (orientation === 'landscape') {
                 document.documentElement.classList.add('landscape-mode');
                 printStyleEl.textContent = '@media print { @page { size: A4 landscape; margin: 0; } }';
@@ -528,16 +577,17 @@
                 option.textContent = i;
                 yearSelect.appendChild(option);
             }
-            yearSelect.value = 2026;
+            yearSelect.value = currentYear;
 
             // 2. 初始化月份勾選框
+            const currentMonth = new Date().getMonth() + 1;
             for (let i = 1; i <= 12; i++) {
                 const label = document.createElement('label');
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = i;
                 checkbox.className = 'month-checkbox';
-                if (i === 5) checkbox.checked = true; // 預設 5 月
+                if (i === currentMonth) checkbox.checked = true; // 預設當月
                 
                 checkbox.addEventListener('change', generateCalendars);
                 
@@ -553,8 +603,8 @@
             sundayFirstCheckbox.addEventListener('change', generateCalendars);
             marginInput.addEventListener('input', updateMargin);
 
-            // 首次渲染（預設直式）
-            setOrientation('portrait');
+            // 首次渲染（預設橫式）
+            setOrientation('landscape');
             updateMargin();
             generateCalendars();
         }
