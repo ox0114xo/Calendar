@@ -8,6 +8,24 @@
         /* 定義可動態調整邊距的 CSS 變數，預設改為 1mm */
         :root {
             --page-padding: 1mm;
+            --page-width: 210mm;
+            --page-height: 297mm;
+            --page-aspect: 210 / 297;
+            --print-width: 210mm;
+            --print-height: 296mm;
+            --print-max-height: 297mm;
+            --print-orientation: portrait;
+        }
+
+        /* 橫式覆寫 */
+        :root.landscape-mode {
+            --page-width: 297mm;
+            --page-height: 210mm;
+            --page-aspect: 297 / 210;
+            --print-width: 297mm;
+            --print-height: 209mm;
+            --print-max-height: 210mm;
+            --print-orientation: landscape;
         }
 
         /* 基本重置與字體 */
@@ -116,6 +134,43 @@
             accent-color: #4CAF50;
         }
 
+        /* 橫式/直式切換按鈕 */
+        .orientation-toggle {
+            display: flex;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .orient-btn {
+            padding: 7px 14px !important;
+            font-size: 14px !important;
+            background-color: #f5f5f5 !important;
+            color: #555 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            cursor: pointer;
+            font-weight: normal !important;
+            transition: background-color 0.2s, color 0.2s !important;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .orient-btn:not(:last-child) {
+            border-right: 1px solid #ccc !important;
+        }
+
+        .orient-btn.active {
+            background-color: #4CAF50 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+
+        .orient-btn:hover:not(.active) {
+            background-color: #e8e8e8 !important;
+        }
+
         /* 月份勾選區塊 */
         .month-selectors {
             display: grid;
@@ -177,13 +232,30 @@
 
         .page {
             width: 100%;
-            max-width: 210mm;
-            aspect-ratio: 210 / 297;
+            max-width: var(--page-width);
+            aspect-ratio: var(--page-aspect);
             background-color: #eeeeee;
             padding: var(--page-padding);
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
+        }
+
+        /* 橫式時字型稍微調大 */
+        :root.landscape-mode .calendar-header {
+            font-size: 32px;
+        }
+        :root.landscape-mode .weekday {
+            font-size: 16px;
+        }
+        :root.landscape-mode .day-number {
+            font-size: 18px;
+        }
+        :root.landscape-mode .holiday-text {
+            font-size: 12px;
+        }
+        :root.landscape-mode .todo-input {
+            font-size: 14px;
         }
 
         .calendar-header {
@@ -295,16 +367,11 @@
             body { background-color: transparent; padding: 0; margin: 0; }
             .controls { display: none; }
             #calendarContainer { gap: 0; }
-            @page { 
-                size: A4 portrait; 
-                margin: 0; 
-            }
             .page {
                 box-shadow: none;
-                width: 210mm !important;
-                /* 微調高度為 296mm 並隱藏溢出，強制避免被擠到第二頁 */
-                height: 296mm !important;
-                max-height: 297mm !important;
+                width: var(--print-width) !important;
+                height: var(--print-height) !important;
+                max-height: var(--print-max-height) !important;
                 aspect-ratio: auto;
                 padding: var(--page-padding) !important;
                 margin: 0 auto;
@@ -324,6 +391,9 @@
                 margin-bottom: 8px !important; 
                 page-break-after: avoid;
             }
+            :root.landscape-mode .calendar-header {
+                font-size: 32px !important;
+            }
             .calendar-grid {
                 page-break-before: avoid;
             }
@@ -333,7 +403,11 @@
             .day-number { font-size: 16px !important; }
             .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
             .todo-input { font-size: 13px !important; }
-            .day-cell { padding: 6px !important; background-color: #ffffff !important; } /* 強制列印一般日期白底 */
+            .day-cell { padding: 6px !important; background-color: #ffffff !important; }
+            :root.landscape-mode .weekday { font-size: 16px !important; }
+            :root.landscape-mode .day-number { font-size: 18px !important; }
+            :root.landscape-mode .holiday-text { font-size: 12px !important; }
+            :root.landscape-mode .todo-input { font-size: 14px !important; }
             .todo-input:empty::before { content: ""; }
         }
     </style>
@@ -346,8 +420,19 @@
                 <select id="yearSelect"></select>
                 <span style="font-size:16px; font-weight: bold; color: #333;">年</span>
             </div>
-            <div class="print-btn-wrapper">
-                <button onclick="triggerPrint()">🖨️ 列印勾選月份</button>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <!-- 橫式/直式切換 -->
+                <div class="orientation-toggle" id="orientationToggle" title="切換橫式/直式">
+                    <button class="orient-btn active" id="btnPortrait" onclick="setOrientation('portrait')">
+                        <svg width="14" height="18" viewBox="0 0 14 18" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="1" y="1" width="12" height="16" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>直式
+                    </button>
+                    <button class="orient-btn" id="btnLandscape" onclick="setOrientation('landscape')">
+                        <svg width="18" height="14" viewBox="0 0 18 14" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="1" y="1" width="16" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>橫式
+                    </button>
+                </div>
+                <div class="print-btn-wrapper">
+                    <button onclick="triggerPrint()">🖨️ 列印勾選月份</button>
+                </div>
             </div>
         </div>
 
@@ -401,6 +486,29 @@
         // 假日快取物件，避免重複發送 API 請求
         const holidayCache = {};
 
+        // 目前方向
+        let currentOrientation = 'portrait';
+
+        // 動態 @page style 標籤，用於控制列印方向
+        const printStyleEl = document.createElement('style');
+        document.head.appendChild(printStyleEl);
+
+        function setOrientation(orientation) {
+            currentOrientation = orientation;
+            if (orientation === 'landscape') {
+                document.documentElement.classList.add('landscape-mode');
+                printStyleEl.textContent = '@media print { @page { size: A4 landscape; margin: 0; } }';
+                document.getElementById('btnLandscape').classList.add('active');
+                document.getElementById('btnPortrait').classList.remove('active');
+            } else {
+                document.documentElement.classList.remove('landscape-mode');
+                printStyleEl.textContent = '@media print { @page { size: A4 portrait; margin: 0; } }';
+                document.getElementById('btnPortrait').classList.add('active');
+                document.getElementById('btnLandscape').classList.remove('active');
+            }
+            generateCalendars();
+        }
+
         // 自訂列印函式：加入手機偵測與提示
         function triggerPrint() {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -445,7 +553,8 @@
             sundayFirstCheckbox.addEventListener('change', generateCalendars);
             marginInput.addEventListener('input', updateMargin);
 
-            // 首次渲染
+            // 首次渲染（預設直式）
+            setOrientation('portrait');
             updateMargin();
             generateCalendars();
         }
