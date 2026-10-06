@@ -379,6 +379,15 @@
         .holiday-notice.show { display: block; }
         #pdfOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); color: #fff; display: none; align-items: center; justify-content: center; z-index: 9999; font-size: 18px; font-weight: bold; text-align: center; padding: 20px; }
         #pdfOverlay.show { display: flex; }
+        /* ★ 下載 PDF 截圖時套用：
+           - html2canvas 不支援 CSS zoom → 截圖期間強制原尺寸（不受螢幕縮放影響）
+           - html2canvas 畫不出「內陰影」，會把整格塗成深灰 → 改用位置相同的 1px 細線 */
+        #calendarContainer.pdf-capture .page { zoom: 1 !important; box-shadow: none !important; }
+        #calendarContainer.pdf-capture .day-cell:not(.other-month) { box-shadow: none !important; position: relative; }
+        #calendarContainer.pdf-capture .day-cell:not(.other-month)::before {
+            content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+            border-top: 1px solid #555; border-left: 1px solid #555; pointer-events: none;
+        }
 
         /* --- 列印專用 CSS (防跑版修復) --- */
         @media print {
@@ -725,6 +734,7 @@
 
         // ★ 預覽縮放：A4 實際寬度（mm → px）塞進目前畫面寬度，最大 1（不放大）
         function updatePreviewZoom() {
+            if (pdfBusy) return;   // 下載 PDF 截圖中不改縮放
             const pageWidthPx = (currentOrientation === 'landscape' ? 297 : 210) * 96 / 25.4;
             const avail = (calendarContainer && calendarContainer.clientWidth) || window.innerWidth;
             const zoom = Math.min(1, Math.max(0.1, (avail - 4) / pageWidthPx));
@@ -878,6 +888,7 @@
         }
 
         // 核心功能：生成選中月份的日曆
+        let pdfBusy = false;   // 下載 PDF 進行中
         let renderSeq = 0;
         async function generateCalendars() {
             const seq = ++renderSeq;
@@ -1097,7 +1108,6 @@
                 document.head.appendChild(sc);
             });
         }
-        let pdfBusy = false;
         async function downloadPDF() {
             if (pdfBusy) return;
             const pages = [...calendarContainer.querySelectorAll('.page')];
@@ -1105,16 +1115,14 @@
             pdfBusy = true;
             const overlay = document.getElementById('pdfOverlay');
             const progress = document.getElementById('pdfProgress');
-            const root = document.documentElement;
-            const prevZoom = root.style.getPropertyValue('--preview-zoom');
             overlay.classList.add('show');
             progress.textContent = '載入元件中…';
             try {
                 await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
                 await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
                 if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-                root.style.setProperty('--preview-zoom', '1');   // 用實際 A4 尺寸截圖
-                await new Promise(r => setTimeout(r, 50));
+                calendarContainer.classList.add('pdf-capture');   // 截圖期間：原尺寸、不用內陰影
+                await new Promise(r => setTimeout(r, 100));
                 const landscape = currentOrientation === 'landscape';
                 const W = landscape ? 297 : 210, H = landscape ? 209 : 296;   // 跟列印同一組尺寸（mm）
                 const pdf = new window.jspdf.jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
@@ -1130,9 +1138,10 @@
             } catch (err) {
                 alert('PDF 產生失敗：' + err.message + '\n\n可以改用「列印」，在列印畫面選「儲存為 PDF」。');
             } finally {
-                if (prevZoom) root.style.setProperty('--preview-zoom', prevZoom); else updatePreviewZoom();
+                calendarContainer.classList.remove('pdf-capture');
                 overlay.classList.remove('show');
                 pdfBusy = false;
+                updatePreviewZoom();
             }
         }
 
