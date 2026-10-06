@@ -360,6 +360,26 @@
         /* 列印也要套用 */
 
 
+        /* ★ 農曆／節氣小字（日期數字下方） */
+        .day-left { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+        .lunar-text { font-size: 11px; color: #999; line-height: 1.2; margin-top: 2px; white-space: nowrap; }
+        .lunar-text.term { color: #2e7d32; font-weight: bold; }
+        .lunar-text.festival { color: #c0392b; }
+        .lunar-text.month { color: #b8860b; font-weight: bold; }
+        :root.landscape-mode .lunar-text { font-size: 12px; }
+        .other-month .lunar-text { opacity: 0.55; }
+
+        /* ★ 省墨（純白）：整頁白底、假日不塗底色，只留紅字與格線 */
+        #calendarContainer.eco-mode .page { background-color: #ffffff !important; }
+        #calendarContainer.eco-mode.show-holidays-mode .day-cell.is-holiday { background-color: #ffffff !important; }
+        #calendarContainer.eco-mode .other-month { background-color: #ffffff !important; }
+
+        /* ★ 假日資料提示、PDF 產生中遮罩 */
+        .holiday-notice { display: none; margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: #fff3cd; color: #7a5b00; font-size: 14px; line-height: 1.5; }
+        .holiday-notice.show { display: block; }
+        #pdfOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); color: #fff; display: none; align-items: center; justify-content: center; z-index: 9999; font-size: 18px; font-weight: bold; text-align: center; padding: 20px; }
+        #pdfOverlay.show { display: flex; }
+
         /* --- 列印專用 CSS (防跑版修復) --- */
         @media print {
             body { background-color: transparent; padding: 0; margin: 0; }
@@ -406,10 +426,17 @@
             :root.landscape-mode .holiday-text { font-size: 12px !important; }
             :root.landscape-mode .todo-input { font-size: 14px !important; }
             .todo-input:empty::before { content: ""; }
+            .lunar-text { font-size: 11px !important; }
+            :root.landscape-mode .lunar-text { font-size: 12px !important; }
+            #calendarContainer.eco-mode .page { background-color: #ffffff !important; }
+            #calendarContainer.eco-mode.show-holidays-mode .day-cell.is-holiday { background-color: #ffffff !important; }
+            #calendarContainer.eco-mode .other-month { background-color: #ffffff !important; }
+            .holiday-notice, #pdfOverlay { display: none !important; }
         }
     </style>
 </head>
 <body>
+    <div id="pdfOverlay"><div>📄 正在產生 PDF…<br><span id="pdfProgress" style="font-size:15px;font-weight:normal;"></span></div></div>
 
     <div class="controls no-print">
         <div class="control-section header-row">
@@ -427,8 +454,9 @@
                         <svg width="18" height="14" viewBox="0 0 18 14" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="1" y="1" width="16" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>橫式
                     </button>
                 </div>
-                <div class="print-btn-wrapper">
+                <div class="print-btn-wrapper" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button onclick="triggerPrint()">🖨️ 列印勾選月份</button>
+                    <button id="pdfBtn" onclick="downloadPDF()" style="background-color:#0d6efd;">📄 下載 PDF</button>
                 </div>
             </div>
         </div>
@@ -444,7 +472,16 @@
                 <input type="checkbox" id="sundayFirst">
                 星期日為第一天
             </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="showLunar" checked>
+                顯示農曆／節氣
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="ecoMode">
+                省墨（純白）
+            </label>
         </div>
+        <div id="holidayNotice" class="holiday-notice"></div>
 
         <hr class="divider">
 
@@ -479,7 +516,10 @@
 
         <div class="control-section">
             <span style="font-weight: bold; color: #333;">選擇列印月份</span>
-            <button id="selectAllBtn" class="btn-secondary btn-small">全選 / 全不選</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="clearNotesBtn" class="btn-secondary btn-small" style="background-color:#6c757d;">🗑 清除備註</button>
+                <button id="selectAllBtn" class="btn-secondary btn-small">全選 / 全不選</button>
+            </div>
         </div>
         <div class="month-selectors" id="monthSelectors">
             </div>
@@ -502,6 +542,120 @@
         
         // 假日快取物件，避免重複發送 API 請求
         const holidayCache = {};
+
+        const showLunarCheckbox = document.getElementById('showLunar');
+        const ecoCheckbox = document.getElementById('ecoMode');
+        const holidayNotice = document.getElementById('holidayNotice');
+
+        // ===== ★ 設定與備註存在這台裝置（localStorage）=====
+        const SETTINGS_KEY = 'cal_settings_v1';
+        const NOTES_KEY = 'cal_notes_v1';
+        function loadJSON(key, fallback) {
+            try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
+        }
+        function saveJSON(key, value) {
+            try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* 無痕模式或空間滿就略過 */ }
+        }
+        let settingsReady = false;   // 還原設定完成前不存，避免預設值蓋掉上次的設定
+        function saveSettings() {
+            if (!settingsReady) return;
+            saveJSON(SETTINGS_KEY, {
+                year: yearSelect.value,
+                orientation: currentOrientation,
+                titleFont: titleFontSize,
+                dateFont: dateFontSize,
+                margin: marginInput.value,
+                months: [...document.querySelectorAll('.month-checkbox:checked')].map(cb => parseInt(cb.value)),
+                showHolidays: showHolidaysCheckbox.checked,
+                sundayFirst: sundayFirstCheckbox.checked,
+                showLunar: showLunarCheckbox.checked,
+                eco: ecoCheckbox.checked,
+            });
+        }
+        // 備註：以實際日期為鍵（YYYY-M-D），換方向／年份／月份重畫、重新整理都還在；同一天出現在兩頁會同步
+        let notes = loadJSON(NOTES_KEY, {});
+        let notesTimer = null;
+        function saveNotesSoon() { clearTimeout(notesTimer); notesTimer = setTimeout(() => saveJSON(NOTES_KEY, notes), 300); }
+        window.addEventListener('pagehide', () => saveJSON(NOTES_KEY, notes));
+        function clearNotes() {
+            if (!Object.keys(notes).length) { alert('目前沒有備註'); return; }
+            if (!confirm('確定清除所有日期格子裡的備註？清除後無法復原。')) return;
+            notes = {};
+            saveJSON(NOTES_KEY, notes);
+            document.querySelectorAll('.todo-input').forEach(el => { el.textContent = ''; });
+        }
+
+        function applyEco() { calendarContainer.classList.toggle('eco-mode', ecoCheckbox.checked); }
+
+        function setHolidayNotice(text) {
+            holidayNotice.textContent = text;
+            holidayNotice.classList.toggle('show', !!text);
+        }
+
+        // ★ 內建假日（網站連不上時用）：2026–2027
+        const BUILTIN_HOLIDAYS = {"2026":{"2026-1-1":"開國紀念日","2026-2-15":"小年夜","2026-2-16":"農曆除夕","2026-2-17":"春節","2026-2-18":"春節","2026-2-19":"春節","2026-2-20":"補假","2026-2-27":"補假","2026-2-28":"和平紀念日","2026-4-3":"補假","2026-4-4":"兒童節","2026-4-5":"清明節","2026-4-6":"補假","2026-5-1":"勞動節","2026-6-19":"端午節","2026-9-25":"中秋節","2026-9-28":"孔子誕辰紀念日/教師節","2026-10-9":"補假","2026-10-10":"國慶日","2026-10-25":"臺灣光復暨金門古寧頭大捷紀念日","2026-10-26":"補假","2026-12-25":"行憲紀念日"},"2027":{"2027-1-1":"開國紀念日","2027-2-4":"小年夜","2027-2-5":"農曆除夕","2027-2-6":"春節","2027-2-7":"春節","2027-2-8":"春節","2027-2-9":"補假","2027-2-10":"補假","2027-2-28":"和平紀念日","2027-3-1":"補假","2027-4-4":"兒童節","2027-4-5":"清明節","2027-4-6":"補假","2027-4-30":"補假","2027-5-1":"勞動節","2027-6-9":"端午節","2027-9-15":"中秋節","2027-9-28":"孔子誕辰紀念日/教師節","2027-10-10":"國慶日","2027-10-11":"補假","2027-10-25":"臺灣光復暨金門古寧頭大捷紀念日","2027-12-24":"補假","2027-12-25":"行憲紀念日","2027-12-31":"補假"}};
+
+        // ===== 農曆／節氣（1950–2100；資料由壽星天文曆演算法產生，台灣時間 UTC+8）=====
+        // LUNAR_INFO：每個農曆年一個數字 → bit15..bit4＝正月..十二月是否大月(30天)、bit3..0＝閏幾月、bit16＝閏月是否大月
+        const LUNAR_BASE_YEAR = 1950;
+        const LUNAR_BASE_UTC = Date.UTC(1950, 1, 17); // 1950 年正月初一
+        const LUNAR_INFO = [0x6ca0,0xb550,0x15355,0x4da0,0xa5b0,0x14573,0x52b0,0xa9a8,0xe950,0x6aa0,0xaea6,0xab50,0x4b60,0xaae4,0xa570,0x5260,0xf263,0xd950,0x5b57,0x56a0,0x96d0,0x4dd5,0x4ad0,0xa4d0,0xd4d4,0xd250,0xd558,0xb540,0xb6a0,0x195a6,0x95b0,0x49b0,0xa974,0xa4b0,0xb27a,0x6a50,0x6d40,0xaf46,0xab60,0x9570,0x4af5,0x4970,0x64b0,0x74a3,0xea50,0x6b58,0x5ac0,0xab60,0x96d5,0x92e0,0xc960,0xd954,0xd4a0,0xda50,0x7552,0x56a0,0xabb7,0x25d0,0x92d0,0xcab5,0xa950,0xb4a0,0xbaa4,0xad50,0x55d9,0x4ba0,0xa5b0,0x15176,0x52b0,0xa930,0x7954,0x6aa0,0xad50,0x5b52,0x4b60,0xa6e6,0xa4e0,0xd260,0xea65,0xd530,0x5aa0,0x76a3,0x96d0,0x4afb,0x4ad0,0xa4d0,0x1d0b6,0xd250,0xd520,0xdd45,0xb5a0,0x56d0,0x55b2,0x49b0,0xa577,0xa4b0,0xaa50,0x1b255,0x6d20,0xada0,0x14b63,0x9370,0x49f8,0x4970,0x64b0,0x168a6,0xea50,0x6b20,0x1a6c4,0xaae0,0x92e0,0xd2e3,0xc960,0xd557,0xd4a0,0xda50,0x5d55,0x56a0,0xa6d0,0x55d4,0x52d0,0xa9b8,0xa950,0xb4a0,0xb6a6,0xad50,0x55a0,0xaba4,0xa5b0,0x52b0,0xb273,0x6930,0x7337,0x6aa0,0xad50,0x14b55,0x4b60,0xa570,0x54e4,0xd160,0xe968,0xd520,0xdaa0,0x16aa6,0x56d0,0x4ae0,0xa9d4,0xa2d0,0xd150,0xf252,0xd520];
+        // 24 節氣：每年 24 字，依序 小寒、大寒、立春…冬至（每月兩個），字元碼 −64 ＝ 當月幾號
+        const TERM_DATA = 'FTDSFUETFUFVHWHXHWIXHWHVFUDSFUEUFVFVHXHXHXIXHWHWFUETEUETEUFUGWGWHWHWGVGVETDSFUETFUFVGWHWHWHXHVGVFTDSFUETFUFVHWHXHWIXHWGVFUDSFUEUFVFVHWHXHXIXHWHVFUETETETEUFUGWGWHWHWGVGVETDSFUETFUFVGWHWHWHXHVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSFUEUFVFVHWHXHXIXHWHVFUESETETEUFUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSFUEUFVFVHWHXHXIXHWHVFUESETETEUFUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSFUEUFVFVHWHXHXIXHWHVFUESETETEUEUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSFUEUFVFVHWHXHXIXHWHVFUESETETEUEUGWGWGWHWGVGVETDSFUETEUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSFUEUFVFVHWHXHWIXHWHVFUESETDTEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSFUETFUFVGWHWHWHXHWGVFTDSFUEUFUFVHWHXHWIXHWHVFUESETDTEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSFUETFUFVGWHWHWHXHVGVFTDSFUETFUFVHWHXHWIXHWHVFUDSETDTEUEUGVGWGWHWGVGVETDSEUETEUFUGWGWHWHWGVGVETDSFUETFUFVGWHWHWHXHVGVFTDSFUETFUFVGWHXHWIXHWGVFUDSETDTEUEUGVGWGWHWGVGUETDSETETEUFUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHXHVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSETDTEUEUGVGWGWHWGVGUETDRETETEUFUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSFUETFUFVGWHWHWIXHWGVFUDSETDTEUEUGVGWGVHWGVGUETDRETDTEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSFUETFUFVGWHWHWHXHWGVFUDSETDTETEUGVGWGVHWGVGUETDRETDTEUEUGVGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSFUETFUFVGWHWHWHXHVGVFTDSETDSETEUGVGWGVHWGVGUETCRETDTEUEUGVGWGWHWGVGVETDSEUETEUFUGWGWHWHWGVGVETDSFUETFUFUGWHWHWHXHVGVFTDSETDSETEUFVGVGVHWGVGUETCRETDTEUEUGVGWGWHWGVGUETDSETETEUFUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHXHVGVFTDSETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETFUFUGWHWHWHWGVGVFTDSETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSETDSETEUFVGVGVHWGVFUETCRETDTETEUGVGWGVHWGVGUETDRETDTEUEUGWGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSETDSETEUFVGVGVGWGVFUETCRETDSETEUGVGWGVHWGVGUETDRETDTEUEUGVGWGWHWGVGVETDSFUETEUFUGWGWHWHWGVGVFTDSETDSETETFVGVGVGWGUFUESCRETDSETEUFVGVGVHWGVGUETCRETDTEUEUGVGWGWHWGVGVETDSETETEUFUGWGWGWHWGVGVETDSETDSETETFVGVGVGWGUFUESCRETDSETEUFVGVGVHWGVGUETCRETDTEUEUGVGWGWHWGVGVETDSETETEUEUGWGWGWHWGVGVETDSETDSETETFVGVGVGWGUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDSETETEUEUGWGWGWHWGVGVETDSETDSETETFVGVGVGVFUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSETDSETETFVGVGVGVFUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSETDSDTETFVFVGVGVFUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTETEUGVGWGVHWGVGUETDRETETEUEUGWGWGWHWGVGVETDSETDSDTETFVFVGVGVFUFUESCRETDSETEUFVGVGVGWGVFUETCRETDTETEUGVGWGVHWGVGUETDRETDTEUEUGVGWGWHWGVGVETDSETDSDTETFVFVGVGVFUFUESCRETDSETEUFVGVGVGWGVFUETCRETDSETEUFVGWGVHWGVGUETDRETDTEUEUGVGWGWHWGVGVETDSETDSDTETFVFVGVGVFUFUESCRETDSETETFVGVGVGWGUFUETCRETDSETEUFVGVGVHWGVGUETCRETDTEUEUGVGWGWHWGVGVETDSDSDSDTETFVFVFVGVFUFUDSCRETDSETETFVGVGVGWGUFUESCRETDSETEUFVGVGVHWGVGUETCRETDTEUEUGVGWGWHWGVGVETDSDSDSDTDTFVFVFVGVFUFUDSCRETDSETETFVGVGVGWGUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDSDSDSDTDTFVFVFVGVFUFUDSCRETDSETETFVGVGVGVFUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRDSDSDTDTFVFVFVGVFUFUDSCRETDSETETFVFVGVGVFUFUESCRETDSETEUFVGVGVHWGVFUETCRETDTEUEUGVGWGWHWGVGUETDRETETEUEUGWGWGWHWGVGV';
+        const TERM_NAMES = ['小寒','大寒','立春','雨水','驚蟄','春分','清明','穀雨','立夏','小滿','芒種','夏至','小暑','大暑','立秋','處暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+        const LUNAR_MONTH_NAMES = ['正月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+        const LUNAR_DAY_NAMES = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+        const LUNAR_FESTIVALS = { '1-15': '元宵', '7-7': '七夕', '7-15': '中元', '9-9': '重陽' };
+
+        function lunarLeapMonth(info) { return info & 0xf; }
+        function lunarLeapDays(info) { return lunarLeapMonth(info) ? ((info & 0x10000) ? 30 : 29) : 0; }
+        function lunarMonthDays(info, m) { return (info & (0x10000 >> m)) ? 30 : 29; }
+        function lunarYearDays(info) {
+            let sum = 0;
+            for (let m = 1; m <= 12; m++) sum += lunarMonthDays(info, m);
+            return sum + lunarLeapDays(info);
+        }
+        // 國曆 → 農曆 { month, day, isLeap }；超出 1950–2100 回傳 null
+        function solarToLunar(y, m, d) {
+            let offset = Math.round((Date.UTC(y, m - 1, d) - LUNAR_BASE_UTC) / 86400000);
+            if (offset < 0) return null;
+            let i = 0;
+            for (; i < LUNAR_INFO.length; i++) {
+                const yd = lunarYearDays(LUNAR_INFO[i]);
+                if (offset < yd) break;
+                offset -= yd;
+            }
+            if (i >= LUNAR_INFO.length) return null;
+            const info = LUNAR_INFO[i], leap = lunarLeapMonth(info);
+            for (let month = 1; month <= 12; month++) {
+                const md = lunarMonthDays(info, month);
+                if (offset < md) return { month, day: offset + 1, isLeap: false };
+                offset -= md;
+                if (leap === month) {
+                    const ld = lunarLeapDays(info);
+                    if (offset < ld) return { month, day: offset + 1, isLeap: true };
+                    offset -= ld;
+                }
+            }
+            return null;
+        }
+        function solarTermOf(y, m, d) {
+            const idx = (y - LUNAR_BASE_YEAR) * 24 + (m - 1) * 2;
+            if (y < LUNAR_BASE_YEAR || idx + 1 >= TERM_DATA.length) return '';
+            if (TERM_DATA.charCodeAt(idx) - 64 === d) return TERM_NAMES[(m - 1) * 2];
+            if (TERM_DATA.charCodeAt(idx + 1) - 64 === d) return TERM_NAMES[(m - 1) * 2 + 1];
+            return '';
+        }
+        // 格子裡顯示的農曆字：節氣優先 → 民俗節日 → 初一顯示月份 → 其餘顯示初幾
+        function lunarCellText(y, m, d) {
+            const term = solarTermOf(y, m, d);
+            if (term) return { text: term, kind: 'term' };
+            const l = solarToLunar(y, m, d);
+            if (!l) return null;
+            if (!l.isLeap && LUNAR_FESTIVALS[l.month + '-' + l.day]) return { text: LUNAR_FESTIVALS[l.month + '-' + l.day], kind: 'festival' };
+            if (l.day === 1) return { text: (l.isLeap ? '閏' : '') + LUNAR_MONTH_NAMES[l.month - 1], kind: 'month' };
+            return { text: LUNAR_DAY_NAMES[l.day - 1], kind: 'day' };
+        }
 
         // 字體大小狀態
         let titleFontSize = 28;
@@ -527,6 +681,14 @@
                 input.value  = val;
                 document.documentElement.style.setProperty('--date-font-size', val + 'px');
             }
+            saveSettings();
+        }
+
+        // 還原設定用：直接指定字體大小
+        function setFontValue(type, val) {
+            const id = type === 'title' ? 'titleFont' : 'dateFont';
+            document.getElementById(id + 'Slider').value = val;
+            syncFont(type, 'slider');
         }
 
         function applyFontDefaults(orientation) {
@@ -594,7 +756,7 @@
         function triggerPrint() {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             if (isMobile) {
-                alert("提醒：手機版 Google Chrome 等瀏覽器會封鎖此按鈕的自動彈出功能。\n\n請直接點擊瀏覽器右上角選單 (⋮) ➔ 選擇「分享」 ➔ 點擊「列印」來進行操作。");
+                alert("提醒：手機版 Google Chrome 等瀏覽器會封鎖此按鈕的自動彈出功能。\n\n請直接點擊瀏覽器右上角選單 (⋮) ➔ 選擇「分享」 ➔ 點擊「列印」來進行操作。\n\n也可以直接按「📄 下載 PDF」存成檔案。");
             }
             window.print();
         }
@@ -635,10 +797,31 @@
             sundayFirstCheckbox.addEventListener('change', generateCalendars);
             marginInput.addEventListener('input', updateMargin);
 
-            // 首次渲染（預設橫式）
-            setOrientation('landscape');
+            showLunarCheckbox.addEventListener('change', generateCalendars);
+            ecoCheckbox.addEventListener('change', () => { applyEco(); saveSettings(); });
+            document.getElementById('clearNotesBtn').addEventListener('click', clearNotes);
+
+            // ★ 還原上次的設定（沒有就用預設：橫式、當月）
+            const saved = loadJSON(SETTINGS_KEY, null);
+            if (saved) {
+                if (saved.year && [...yearSelect.options].some(o => o.value == saved.year)) yearSelect.value = saved.year;
+                if (Array.isArray(saved.months)) {
+                    document.querySelectorAll('.month-checkbox').forEach(cb => { cb.checked = saved.months.includes(parseInt(cb.value)); });
+                }
+                showHolidaysCheckbox.checked = saved.showHolidays !== false;
+                sundayFirstCheckbox.checked = !!saved.sundayFirst;
+                showLunarCheckbox.checked = saved.showLunar !== false;
+                ecoCheckbox.checked = !!saved.eco;
+                if (saved.margin !== undefined && saved.margin !== '') marginInput.value = saved.margin;
+            }
+            isAllSelected = document.querySelectorAll('.month-checkbox:checked').length === 12;
+            applyEco();
+            setOrientation(saved && saved.orientation === 'portrait' ? 'portrait' : 'landscape');   // 會套方向預設字體並重畫
+            if (saved && saved.titleFont) setFontValue('title', saved.titleFont);
+            if (saved && saved.dateFont) setFontValue('date', saved.dateFont);
             updateMargin();
-            generateCalendars();
+            settingsReady = true;
+            saveSettings();
         }
 
         // 全選/全不選邏輯
@@ -653,15 +836,20 @@
         // 動態更新 CSS 變數以統一調整四周邊距
         function updateMargin() {
             document.documentElement.style.setProperty('--page-padding', marginInput.value + 'mm');
+            saveSettings();
         }
 
         // 從開放資料 API 獲取台灣假日
+        // ★ 回傳 { data, source }：net＝剛抓到、cache＝上次存的、builtin＝內建、none＝都沒有
         async function fetchTaiwanHolidays(year) {
             if (holidayCache[year]) return holidayCache[year];
             
             try {
-                // 使用 ruyut/TaiwanCalendar GitHub Pages API
-                const response = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
+                // 使用 ruyut/TaiwanCalendar GitHub Pages API（8 秒逾時，連不上就改用備援）
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 8000);
+                const response = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`, { signal: ctrl.signal });
+                clearTimeout(timer);
                 if (!response.ok) throw new Error('API fetch error');
                 
                 const data = await response.json();
@@ -676,16 +864,25 @@
                     }
                 });
                 
-                holidayCache[year] = holidays;
-                return holidays;
+                saveJSON('cal_holidays_' + year, holidays);   // 存一份，下次連不上也能用
+                holidayCache[year] = { data: holidays, source: 'net' };
+                return holidayCache[year];
             } catch (error) {
                 console.warn(`無法取得 ${year} 年假日資料:`, error);
-                return {};
+                const cached = loadJSON('cal_holidays_' + year, null);
+                if (cached && Object.keys(cached).length) holidayCache[year] = { data: cached, source: 'cache' };
+                else if (BUILTIN_HOLIDAYS[year]) holidayCache[year] = { data: BUILTIN_HOLIDAYS[year], source: 'builtin' };
+                else holidayCache[year] = { data: {}, source: 'none' };
+                return holidayCache[year];
             }
         }
 
         // 核心功能：生成選中月份的日曆
+        let renderSeq = 0;
         async function generateCalendars() {
+            const seq = ++renderSeq;
+            saveSettings();
+            applyEco();
             const year = parseInt(yearSelect.value);
             const checkboxes = document.querySelectorAll('.month-checkbox:checked');
             const isSundayFirst = sundayFirstCheckbox.checked;
@@ -708,9 +905,22 @@
 
             // 準備假日資料
             let holidaysData = {};
+            let notice = '';
             if (showHolidaysCheckbox.checked) {
-                holidaysData = await fetchTaiwanHolidays(year);
+                // 一月頁會出現去年 12 月底、十二月頁會出現明年 1 月初 → 也抓相鄰年份
+                const months = [...checkboxes].map(cb => parseInt(cb.value));
+                const years = [year];
+                if (months.includes(1)) years.push(year - 1);
+                if (months.includes(12)) years.push(year + 1);
+                const results = await Promise.all(years.map(fetchTaiwanHolidays));
+                results.slice().reverse().forEach(r => Object.assign(holidaysData, r.data));
+                const main = results[0];
+                if (main.source === 'cache') notice = `⚠️ 目前連不上假日資料網站，先用上次存下的 ${year} 年假日。`;
+                else if (main.source === 'builtin') notice = `⚠️ 目前連不上假日資料網站，先用內建的 ${year} 年假日。`;
+                else if (main.source === 'none') notice = `⚠️ 抓不到 ${year} 年的假日資料，月曆上只標週末。網路恢復後重新整理即可。`;
             }
+            if (seq !== renderSeq) return;   // 期間又改了設定，交給較新的那次重畫
+            setHolidayNotice(notice);
 
             calendarContainer.innerHTML = ''; // 清空準備重繪
 
@@ -828,13 +1038,37 @@
                         if (isCurrentMonth) dayCell.classList.add('is-holiday');
                     }
 
-                    dayHeader.appendChild(daySpan);
+                    const dayLeft = document.createElement('div');
+                    dayLeft.className = 'day-left';
+                    dayLeft.appendChild(daySpan);
+                    if (showLunarCheckbox.checked && currentCellDate) {
+                        const [cy, cm, cd] = currentCellDate.split('-').map(Number);
+                        const lt = lunarCellText(cy, cm, cd);
+                        if (lt) {
+                            const lunarSpan = document.createElement('span');
+                            lunarSpan.className = 'lunar-text ' + lt.kind;
+                            lunarSpan.textContent = lt.text;
+                            dayLeft.appendChild(lunarSpan);
+                        }
+                    }
+                    dayHeader.appendChild(dayLeft);
                     dayHeader.appendChild(holidaySpan);
                     dayCell.appendChild(dayHeader);
 
                     const todoInput = document.createElement('div');
                     todoInput.className = 'todo-input';
                     todoInput.contentEditable = 'true';
+                    // ★ 備註：還原＋輸入時保存（同一天在別頁的格子同步）
+                    todoInput.dataset.date = currentCellDate;
+                    if (notes[currentCellDate]) todoInput.innerText = notes[currentCellDate];
+                    todoInput.addEventListener('input', () => {
+                        const text = todoInput.innerText.replace(/\n+$/, '');
+                        if (text.trim()) notes[currentCellDate] = text; else delete notes[currentCellDate];
+                        document.querySelectorAll(`.todo-input[data-date="${currentCellDate}"]`).forEach(el => {
+                            if (el !== todoInput && el.innerText.replace(/\n+$/, '') !== text) el.innerText = text;
+                        });
+                        saveNotesSoon();
+                    });
                     todoInput.addEventListener('paste', function(e) {
                         e.preventDefault();
                         const text = (e.originalEvent || e).clipboardData.getData('text/plain');
@@ -850,6 +1084,56 @@
             gridDiv.appendChild(daysDiv);
             pageDiv.appendChild(gridDiv);
             calendarContainer.appendChild(pageDiv);
+        }
+
+        // ===== ★ 下載 PDF：每頁用 html2canvas 截成圖，jsPDF 組成 A4 PDF（手機不用經過列印選單）=====
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                if ([...document.scripts].some(sc => sc.src === src)) return resolve();
+                const sc = document.createElement('script');
+                sc.src = src;
+                sc.onload = () => resolve();
+                sc.onerror = () => reject(new Error('無法載入 PDF 元件，請確認網路連線'));
+                document.head.appendChild(sc);
+            });
+        }
+        let pdfBusy = false;
+        async function downloadPDF() {
+            if (pdfBusy) return;
+            const pages = [...calendarContainer.querySelectorAll('.page')];
+            if (!pages.length) { alert('請先勾選至少一個月份'); return; }
+            pdfBusy = true;
+            const overlay = document.getElementById('pdfOverlay');
+            const progress = document.getElementById('pdfProgress');
+            const root = document.documentElement;
+            const prevZoom = root.style.getPropertyValue('--preview-zoom');
+            overlay.classList.add('show');
+            progress.textContent = '載入元件中…';
+            try {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+                if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+                root.style.setProperty('--preview-zoom', '1');   // 用實際 A4 尺寸截圖
+                await new Promise(r => setTimeout(r, 50));
+                const landscape = currentOrientation === 'landscape';
+                const W = landscape ? 297 : 210, H = landscape ? 209 : 296;   // 跟列印同一組尺寸（mm）
+                const pdf = new window.jspdf.jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+                for (let i = 0; i < pages.length; i++) {
+                    progress.textContent = `第 ${i + 1} / ${pages.length} 頁`;
+                    const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', logging: false });
+                    if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
+                    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H);
+                    canvas.width = canvas.height = 0;   // 釋放記憶體
+                }
+                const months = [...document.querySelectorAll('.month-checkbox:checked')].map(cb => cb.value);
+                pdf.save(`月曆-${yearSelect.value}${months.length === 12 ? '' : '-' + months.join('_') + '月'}.pdf`);
+            } catch (err) {
+                alert('PDF 產生失敗：' + err.message + '\n\n可以改用「列印」，在列印畫面選「儲存為 PDF」。');
+            } finally {
+                if (prevZoom) root.style.setProperty('--preview-zoom', prevZoom); else updatePreviewZoom();
+                overlay.classList.remove('show');
+                pdfBusy = false;
+            }
         }
 
         // 啟動程式
