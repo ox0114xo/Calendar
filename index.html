@@ -17,6 +17,7 @@
             --print-orientation: portrait;
             --title-font-size: 28px;
             --date-font-size: 16px;
+            --note-font-size: 13px;
         }
 
         /* 橫式覆寫 */
@@ -253,9 +254,6 @@
         :root.landscape-mode .holiday-text {
             font-size: 12px;
         }
-        :root.landscape-mode .todo-input {
-            font-size: 14px;
-        }
 
         .calendar-header {
             text-align: center;
@@ -339,7 +337,7 @@
         .todo-input {
             flex-grow: 1;
             outline: none;
-            font-size: 13px;
+            font-size: var(--note-font-size);   /* ★ 備註字體可調 */
             color: #444;
             line-height: 1.4;
             overflow: hidden;
@@ -379,6 +377,10 @@
         .holiday-notice.show { display: block; }
         #pdfOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); color: #fff; display: none; align-items: center; justify-content: center; z-index: 9999; font-size: 18px; font-weight: bold; text-align: center; padding: 20px; }
         #pdfOverlay.show { display: flex; }
+        /* ★ 頁尾自訂文字（店名、電話、標語） */
+        .page-footer { text-align: center; color: #666; font-size: 13px; line-height: 1.3; margin-top: 4px; white-space: pre-wrap; word-break: break-all; }
+        :root.landscape-mode .page-footer { font-size: 14px; }
+        .footer-input { flex: 1; min-width: 180px; padding: 6px 10px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; }
         /* ★ 下載 PDF 截圖時套用：
            - html2canvas 不支援 CSS zoom → 截圖期間強制原尺寸（不受螢幕縮放影響）
            - html2canvas 畫不出「內陰影」，會把整格塗成深灰 → 改用位置相同的 1px 細線 */
@@ -426,14 +428,13 @@
             .weekday { font-size: 15px !important; padding: 8px 0 !important; }
             .day-number { font-size: var(--date-font-size) !important; }
             .holiday-text { font-size: 11px !important; opacity: 0.5 !important; }
-            .todo-input { font-size: 13px !important; }
+            .todo-input { font-size: var(--note-font-size) !important; }
             .day-cell { padding: 6px !important; background-color: #ffffff !important; }
             .day-cell:not(.other-month) { box-shadow: inset 1px 1px 0 0 #555 !important; }
             .other-month { background-color: #f7f7f7 !important; }
             .calendar-header { font-size: var(--title-font-size) !important; margin-bottom: 8px !important; page-break-after: avoid; }
             :root.landscape-mode .weekday { font-size: 16px !important; }
             :root.landscape-mode .holiday-text { font-size: 12px !important; }
-            :root.landscape-mode .todo-input { font-size: 14px !important; }
             .todo-input:empty::before { content: ""; }
             .lunar-text { font-size: 11px !important; }
             :root.landscape-mode .lunar-text { font-size: 12px !important; }
@@ -489,8 +490,23 @@
                 <input type="checkbox" id="ecoMode">
                 省墨（純白）
             </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="autoRows" checked>
+                只排需要的週數
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="rocYear" checked>
+                標題加民國年
+            </label>
         </div>
         <div id="holidayNotice" class="holiday-notice"></div>
+
+        <hr class="divider">
+
+        <div class="control-section" style="gap: 10px; flex-wrap: wrap;">
+            <span style="font-weight: bold; color: #333;">頁尾文字</span>
+            <input type="text" id="footerText" class="footer-input" maxlength="120" placeholder="例如：店名、電話、標語（空白就不印）">
+        </div>
 
         <hr class="divider">
 
@@ -509,13 +525,19 @@
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span style="width:56px; color:#333;">標題</span>
                     <input type="range" id="titleFontSlider" min="10" max="60" value="28" style="flex:1;" oninput="syncFont('title','slider')">
-                    <input type="number" id="titleFontInput" min="10" max="60" value="28" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('title','input')">
+                    <input type="number" id="titleFontInput" min="10" max="60" value="28" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('title','input')" onchange="syncFont('title','blur')">
                     <span style="color:#888;font-size:13px;">px</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span style="width:56px; color:#333;">日期數字</span>
                     <input type="range" id="dateFontSlider" min="8" max="40" value="16" style="flex:1;" oninput="syncFont('date','slider')">
-                    <input type="number" id="dateFontInput" min="8" max="40" value="16" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('date','input')">
+                    <input type="number" id="dateFontInput" min="8" max="40" value="16" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('date','input')" onchange="syncFont('date','blur')">
+                    <span style="color:#888;font-size:13px;">px</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="width:56px; color:#333;">備註文字</span>
+                    <input type="range" id="noteFontSlider" min="8" max="30" value="13" style="flex:1;" oninput="syncFont('note','slider')">
+                    <input type="number" id="noteFontInput" min="8" max="30" value="13" style="width:54px;text-align:center;padding:4px 6px;font-size:14px;border:1px solid #ccc;border-radius:6px;" oninput="syncFont('note','input')" onchange="syncFont('note','blur')">
                     <span style="color:#888;font-size:13px;">px</span>
                 </div>
             </div>
@@ -553,6 +575,17 @@
         const holidayCache = {};
 
         const showLunarCheckbox = document.getElementById('showLunar');
+        const autoRowsCheckbox = document.getElementById('autoRows');
+        const rocCheckbox = document.getElementById('rocYear');
+        const footerInput = document.getElementById('footerText');
+        // ★ 太長的假日名稱改短，避免在格子裡擠成好幾行
+        const SHORT_HOLIDAY_NAMES = { '臺灣光復暨金門古寧頭大捷紀念日': '光復節', '孔子誕辰紀念日/教師節': '教師節' };
+        function shortHolidayName(name) { return SHORT_HOLIDAY_NAMES[name] || name; }
+        // ★ 頁尾文字：直接更新每一頁，不用整個重畫
+        function updateFooters() {
+            const text = footerInput.value.trim();
+            document.querySelectorAll('.page-footer').forEach(el => { el.textContent = text; el.style.display = text ? '' : 'none'; });
+        }
         const ecoCheckbox = document.getElementById('ecoMode');
         const holidayNotice = document.getElementById('holidayNotice');
 
@@ -574,6 +607,10 @@
                 titleFont: titleFontSize,
                 dateFont: dateFontSize,
                 margin: marginInput.value,
+                noteFont: noteFontSize,
+                autoRows: autoRowsCheckbox.checked,
+                rocYear: rocCheckbox.checked,
+                footer: footerInput.value,
                 months: [...document.querySelectorAll('.month-checkbox:checked')].map(cb => parseInt(cb.value)),
                 showHolidays: showHolidaysCheckbox.checked,
                 sundayFirst: sundayFirstCheckbox.checked,
@@ -666,51 +703,51 @@
             return { text: LUNAR_DAY_NAMES[l.day - 1], kind: 'day' };
         }
 
-        // 字體大小狀態
+        // 字體大小狀態（標題、日期數字、備註文字）
         let titleFontSize = 28;
         let dateFontSize = 16;
-
+        let noteFontSize = 13;
+        const FONT_CFG = {
+            title: { min: 10, max: 60, cssVar: '--title-font-size' },
+            date:  { min: 8,  max: 40, cssVar: '--date-font-size' },
+            note:  { min: 8,  max: 30, cssVar: '--note-font-size' },
+        };
+        function getFont(type) { return type === 'title' ? titleFontSize : type === 'date' ? dateFontSize : noteFontSize; }
+        function setFontState(type, val) {
+            if (type === 'title') titleFontSize = val; else if (type === 'date') dateFontSize = val; else noteFontSize = val;
+        }
+        // source：slider＝拉桿、input＝數字框打字中、blur＝數字框打完（離開或按 Enter）
         function syncFont(type, source) {
-            if (type === 'title') {
-                const slider = document.getElementById('titleFontSlider');
-                const input  = document.getElementById('titleFontInput');
-                let val = parseInt(source === 'slider' ? slider.value : input.value) || titleFontSize;
-                val = Math.max(10, Math.min(60, val));
-                titleFontSize = val;
-                slider.value = val;
-                input.value  = val;
-                document.documentElement.style.setProperty('--title-font-size', val + 'px');
-            } else {
-                const slider = document.getElementById('dateFontSlider');
-                const input  = document.getElementById('dateFontInput');
-                let val = parseInt(source === 'slider' ? slider.value : input.value) || dateFontSize;
-                val = Math.max(8, Math.min(40, val));
-                dateFontSize = val;
-                slider.value = val;
-                input.value  = val;
-                document.documentElement.style.setProperty('--date-font-size', val + 'px');
-            }
+            const cfg = FONT_CFG[type];
+            const slider = document.getElementById(type + 'FontSlider');
+            const input  = document.getElementById(type + 'FontInput');
+            const raw = parseInt(source === 'slider' ? slider.value : input.value);
+            // ★ 打字中（例如要打 40 先打了 4）不套用也不改寫數字框；打完再整理
+            if (source === 'input' && (isNaN(raw) || raw < cfg.min || raw > cfg.max)) return;
+            const val = isNaN(raw) ? getFont(type) : Math.max(cfg.min, Math.min(cfg.max, raw));
+            setFontState(type, val);
+            slider.value = val;
+            if (source !== 'input') input.value = val;
+            document.documentElement.style.setProperty(cfg.cssVar, val + 'px');
             saveSettings();
         }
 
         // 還原設定用：直接指定字體大小
         function setFontValue(type, val) {
-            const id = type === 'title' ? 'titleFont' : 'dateFont';
-            document.getElementById(id + 'Slider').value = val;
+            document.getElementById(type + 'FontSlider').value = val;
             syncFont(type, 'slider');
         }
 
+        // 換方向時套用該方向的預設字體
         function applyFontDefaults(orientation) {
-            titleFontSize = orientation === 'landscape' ? 32 : 28;
-            dateFontSize  = orientation === 'landscape' ? 18 : 16;
-            document.documentElement.style.setProperty('--title-font-size', titleFontSize + 'px');
-            document.documentElement.style.setProperty('--date-font-size', dateFontSize + 'px');
-            const ts = document.getElementById('titleFontSlider');
-            const ti = document.getElementById('titleFontInput');
-            const ds = document.getElementById('dateFontSlider');
-            const di = document.getElementById('dateFontInput');
-            if (ts) { ts.value = titleFontSize; ti.value = titleFontSize; }
-            if (ds) { ds.value = dateFontSize;  di.value = dateFontSize; }
+            const land = orientation === 'landscape';
+            const defs = { title: land ? 32 : 28, date: land ? 18 : 16, note: land ? 14 : 13 };
+            Object.keys(defs).forEach(type => {
+                setFontState(type, defs[type]);
+                document.documentElement.style.setProperty(FONT_CFG[type].cssVar, defs[type] + 'px');
+                const sl = document.getElementById(type + 'FontSlider'), inp = document.getElementById(type + 'FontInput');
+                if (sl) { sl.value = defs[type]; inp.value = defs[type]; }
+            });
         }
 
         // 目前方向
@@ -808,6 +845,9 @@
             marginInput.addEventListener('input', updateMargin);
 
             showLunarCheckbox.addEventListener('change', generateCalendars);
+            autoRowsCheckbox.addEventListener('change', generateCalendars);
+            rocCheckbox.addEventListener('change', generateCalendars);
+            footerInput.addEventListener('input', () => { updateFooters(); saveSettings(); });
             ecoCheckbox.addEventListener('change', () => { applyEco(); saveSettings(); });
             document.getElementById('clearNotesBtn').addEventListener('click', clearNotes);
 
@@ -822,24 +862,27 @@
                 sundayFirstCheckbox.checked = !!saved.sundayFirst;
                 showLunarCheckbox.checked = saved.showLunar !== false;
                 ecoCheckbox.checked = !!saved.eco;
+                autoRowsCheckbox.checked = saved.autoRows !== false;
+                rocCheckbox.checked = saved.rocYear !== false;
+                footerInput.value = saved.footer || '';
                 if (saved.margin !== undefined && saved.margin !== '') marginInput.value = saved.margin;
             }
-            isAllSelected = document.querySelectorAll('.month-checkbox:checked').length === 12;
             applyEco();
             setOrientation(saved && saved.orientation === 'portrait' ? 'portrait' : 'landscape');   // 會套方向預設字體並重畫
             if (saved && saved.titleFont) setFontValue('title', saved.titleFont);
             if (saved && saved.dateFont) setFontValue('date', saved.dateFont);
+            if (saved && saved.noteFont) setFontValue('note', saved.noteFont);
             updateMargin();
             settingsReady = true;
             saveSettings();
         }
 
         // 全選/全不選邏輯
-        let isAllSelected = false;
         function toggleAllMonths() {
-            isAllSelected = !isAllSelected;
-            const checkboxes = document.querySelectorAll('.month-checkbox');
-            checkboxes.forEach(cb => cb.checked = isAllSelected);
+            // ★ 依目前勾選狀態判斷：全部勾了 → 全不選；否則 → 全選
+            const checkboxes = [...document.querySelectorAll('.month-checkbox')];
+            const allChecked = checkboxes.every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
             generateCalendars();
         }
 
@@ -948,7 +991,7 @@
 
             const headerDiv = document.createElement('div');
             headerDiv.className = 'calendar-header';
-            headerDiv.textContent = `${chineseMonths[month]} ${year}`;
+            headerDiv.textContent = `${chineseMonths[month]} ${year}` + (rocCheckbox.checked && year > 1911 ? `（民國${year - 1911}年）` : '');
             pageDiv.appendChild(headerDiv);
 
             const gridDiv = document.createElement('div');
@@ -999,7 +1042,9 @@
             let nextMonthCounter = 1;
             let prevMonthCounter = daysInPrevMonth - firstDayOfWeek + 2;
 
-            for (let row = 0; row < 6; row++) {
+            // ★ 只排需要的週數（4～6 週），格子變高、書寫空間變大；關掉就固定 6 週
+            const totalRows = autoRowsCheckbox.checked ? Math.ceil((firstDayOfWeek - 1 + daysInMonth) / 7) : 6;
+            for (let row = 0; row < totalRows; row++) {
                 const weekRow = document.createElement('div');
                 weekRow.className = 'week-row';
 
@@ -1045,7 +1090,7 @@
                     }
 
                     if (holidaysData[currentCellDate]) {
-                        holidaySpan.textContent = holidaysData[currentCellDate];
+                        holidaySpan.textContent = shortHolidayName(holidaysData[currentCellDate]);
                         if (isCurrentMonth) dayCell.classList.add('is-holiday');
                     }
 
@@ -1094,6 +1139,12 @@
 
             gridDiv.appendChild(daysDiv);
             pageDiv.appendChild(gridDiv);
+            // ★ 頁尾文字
+            const footerDiv = document.createElement('div');
+            footerDiv.className = 'page-footer';
+            footerDiv.textContent = footerInput.value.trim();
+            if (!footerDiv.textContent) footerDiv.style.display = 'none';
+            pageDiv.appendChild(footerDiv);
             calendarContainer.appendChild(pageDiv);
         }
 
