@@ -232,10 +232,13 @@
             align-items: center;
         }
 
+        /* ★ 預覽用真實 A4 尺寸（跟列印同一組寬高），再依螢幕寬度整頁縮放（--preview-zoom 由 JS 計算），
+           調字體大小、邊界時預覽會等比例跟著變，手機上看到的就是印出來的樣子 */
         .page {
-            width: 100%;
-            max-width: var(--page-width);
-            aspect-ratio: var(--page-aspect);
+            width: var(--print-width);
+            height: var(--print-height);
+            flex-shrink: 0;
+            zoom: var(--preview-zoom, 1);
             background-color: #eeeeee;
             padding: var(--page-padding);
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
@@ -356,14 +359,6 @@
         }
         /* 列印也要套用 */
 
-        @media (max-width: 768px) {
-            .calendar-header { font-size: 18px; margin-bottom: 5px; }
-            .weekday { font-size: 10px; padding: 4px 0; }
-            .day-number { font-size: 12px; }
-            .holiday-text { font-size: 9px; }
-            .todo-input { font-size: 10px; }
-            .day-cell { padding: 4px; }
-        }
 
         /* --- 列印專用 CSS (防跑版修復) --- */
         @media print {
@@ -378,6 +373,7 @@
                 aspect-ratio: auto;
                 padding: var(--page-padding) !important;
                 margin: 0 auto;
+                zoom: 1 !important;
                 page-break-after: always;
                 page-break-inside: avoid;
                 break-inside: avoid;
@@ -390,12 +386,8 @@
             
             /* 避免網格內部標題斷層 */
             .calendar-header { 
-                font-size: 28px !important; 
                 margin-bottom: 8px !important; 
                 page-break-after: avoid;
-            }
-            :root.landscape-mode .calendar-header {
-                font-size: 32px !important;
             }
             .calendar-grid {
                 page-break-before: avoid;
@@ -569,6 +561,15 @@
             printLandscapeStyle.disabled = (currentOrientation === 'portrait');
         });
 
+        // ★ 預覽縮放：A4 實際寬度（mm → px）塞進目前畫面寬度，最大 1（不放大）
+        function updatePreviewZoom() {
+            const pageWidthPx = (currentOrientation === 'landscape' ? 297 : 210) * 96 / 25.4;
+            const avail = (calendarContainer && calendarContainer.clientWidth) || window.innerWidth;
+            const zoom = Math.min(1, Math.max(0.1, (avail - 4) / pageWidthPx));
+            document.documentElement.style.setProperty('--preview-zoom', zoom.toFixed(4));
+        }
+        window.addEventListener('resize', updatePreviewZoom);
+
         function setOrientation(orientation) {
             currentOrientation = orientation;
             applyFontDefaults(orientation);
@@ -585,6 +586,7 @@
                 document.getElementById('btnPortrait').classList.add('active');
                 document.getElementById('btnLandscape').classList.remove('active');
             }
+            updatePreviewZoom();
             generateCalendars();
         }
 
